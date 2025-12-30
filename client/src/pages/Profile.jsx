@@ -301,7 +301,7 @@ function Profile() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="certificateName">Certificate Name</label>
+              <label htmlFor="certificateName">Name in Certificate </label>
               <input
                 type="text"
                 id="certificateName"

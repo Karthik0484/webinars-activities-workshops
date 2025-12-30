@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import User from './models/User.js';
 import bcrypt from 'bcryptjs';
 
-mongoose.connect('mongodb://localhost:27017/akvora')
+mongoose.connect('mongodb+srv://Aravind:Aravind%402041@cluster0.ykz5b.mongodb.net/Akvora_Webiners')
   .then(async () => {
     console.log('Connected to MongoDB');
     const admin = await User.findOne({ email: 'admin@akvora.com' });
