@@ -305,6 +305,26 @@ function AdminDashboard() {
         <div className="admin-header-content">
           <h1>AKVORA Admin Dashboard</h1>
           <div className="admin-user-info">
+            <nav className="admin-nav">
+              <button
+                onClick={() => navigate('/admin/dashboard')}
+                className="nav-btn active"
+              >
+                Events
+              </button>
+              <button
+                onClick={() => navigate('/admin/users')}
+                className="nav-btn"
+              >
+                Users
+              </button>
+              <button
+                onClick={() => navigate('/admin/user-profiles')}
+                className="nav-btn"
+              >
+                User Profiles
+              </button>
+            </nav>
             <span>Admin</span>
             <button onClick={handleLogout} className="logout-btn">Logout</button>
           </div>

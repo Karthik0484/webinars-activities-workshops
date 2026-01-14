@@ -25,6 +25,9 @@ function Profile() {
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
   const [localImage, setLocalImage] = useState('');
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [blockReason, setBlockReason] = useState('');
+  const [userStatus, setUserStatus] = useState('ACTIVE');
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -58,6 +61,9 @@ function Profile() {
         setAkvoraId(userData.akvoraId || '');
         setAvatarUrl(userData.avatarUrl || '');
         setAvatarPreview(userData.avatarUrl || '');
+        setIsBlocked(userData.isBlocked || false);
+        setBlockReason(userData.blockReason || '');
+        setUserStatus(userData.status || (userData.isDeleted ? 'DELETED' : userData.isBlocked ? 'BLOCKED' : 'ACTIVE'));
       }
     } catch (error) {
       // If profile doesn't exist (404), pre-fill with Clerk data
@@ -224,103 +230,131 @@ function Profile() {
     <div>
       <Navbar />
       <div className="profile-container">
-        <div className="profile-header-card">
-          <div className="avatar-block">
-            <div className="avatar-preview">
-              {avatarPreview ? (
-                <img src={avatarPreview} alt="Avatar" />
-              ) : (
-                <div className="avatar-placeholder">Add Photo</div>
-              )}
+        {/* Conditional Rendering: Show ONLY blocked message OR profile content */}
+        {userStatus === 'BLOCKED' || isBlocked ? (
+          // Blocked User Notification - Show ONLY this when blocked
+          <div className="blocked-notification">
+            <div className="blocked-notification-content">
+              <div className="blocked-icon">⚠️</div>
+              <div className="blocked-message">
+                <h3>Your account has been blocked by the AKVORA admin.</h3>
+                {blockReason && (
+                  <div className="block-reason-display">
+                    <p className="block-reason-label"><strong>Reason:</strong></p>
+                    <p className="block-reason-text">{blockReason}</p>
+                  </div>
+                )}
+                <p>If you believe this is an error, please contact our support team:</p>
+                <div className="blocked-contact-info">
+                  <p><strong>Email:</strong> support@akvora.com</p>
+                  <p><strong>Phone:</strong> +91-XXXXXXXXXX</p>
+                </div>
+              </div>
             </div>
-            <label className="avatar-upload-btn">
-              Upload Photo
-              <input type="file" accept="image/*" onChange={handleAvatarChange} />
-            </label>
-            <p className="avatar-hint">PNG/JPG, up to 2MB</p>
           </div>
+        ) : (
+          // Profile Content - Show ONLY this when not blocked
+          <>
+            <div className="profile-header-card">
+              <div className="avatar-block">
+                <div className="avatar-preview">
+                  {avatarPreview ? (
+                    <img src={avatarPreview} alt="Avatar" />
+                  ) : (
+                    <div className="avatar-placeholder">Add Photo</div>
+                  )}
+                </div>
+                <label className="avatar-upload-btn">
+                  Upload Photo
+                  <input type="file" accept="image/*" onChange={handleAvatarChange} />
+                </label>
+                <p className="avatar-hint">PNG/JPG, up to 2MB</p>
+              </div>
 
-          <div className="id-block">
-            <p className="label">AKVORA ID</p>
-            <h2>{akvoraId || 'Pending'}</h2>
-            <p className="muted">{formData.email}</p>
-            {success && <div className="success-message compact">{success}</div>}
-            {error && <div className="error-message compact">{error}</div>}
-          </div>
-        </div>
-
-        <div className="profile-box">
-          <h1>Complete Your Profile</h1>
-
-          <form onSubmit={handleSubmit} className="profile-form">
-            <div className="form-group">
-              <label htmlFor="firstName">First Name</label>
-              <input
-                type="text"
-                id="firstName"
-                name="firstName"
-                value={formData.firstName}
-                onChange={handleChange}
-                required
-              />
+              <div className="id-block">
+                <p className="label">AKVORA ID</p>
+                <h2>{akvoraId || 'Pending'}</h2>
+                <p className="muted">{formData.email}</p>
+                {success && <div className="success-message compact">{success}</div>}
+                {error && <div className="error-message compact">{error}</div>}
+              </div>
             </div>
 
-            <div className="form-group">
-              <label htmlFor="lastName">Last Name</label>
-              <input
-                type="text"
-                id="lastName"
-                name="lastName"
-                value={formData.lastName}
-                onChange={handleChange}
-                required
-              />
-            </div>
+            <div className="profile-box">
+              <h1>Complete Your Profile</h1>
 
-            <div className="form-group">
-              <label htmlFor="email">Email</label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                required
-              />
-            </div>
+              <form onSubmit={handleSubmit} className="profile-form">
+                <div className="form-group">
+                  <label htmlFor="firstName">First Name</label>
+                  <input
+                    type="text"
+                    id="firstName"
+                    name="firstName"
+                    value={formData.firstName}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
 
-            <div className="form-group">
-              <label htmlFor="phone">Phone</label>
-              <input
-                type="tel"
-                id="phone"
-                name="phone"
-                value={formData.phone}
-                onChange={handleChange}
-              />
-            </div>
+                <div className="form-group">
+                  <label htmlFor="lastName">Last Name</label>
+                  <input
+                    type="text"
+                    id="lastName"
+                    name="lastName"
+                    value={formData.lastName}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
 
-            <div className="form-group">
-              <label htmlFor="certificateName">Name in Certificate </label>
-              <input
-                type="text"
-                id="certificateName"
-                name="certificateName"
-                value={formData.certificateName}
-                onChange={handleChange}
-              />
-            </div>
+                <div className="form-group">
+                  <label htmlFor="email">Email</label>
+                  <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
 
-            <div className="form-actions">
-              <button type="submit" disabled={loading} className="submit-btn">
-                {loading ? 'Saving...' : 'Save Profile'}
-              </button>
+                <div className="form-group">
+                  <label htmlFor="phone">Phone</label>
+                  <input
+                    type="tel"
+                    id="phone"
+                    name="phone"
+                    value={formData.phone}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="certificateName">Name in Certificate </label>
+                  <input
+                    type="text"
+                    id="certificateName"
+                    name="certificateName"
+                    value={formData.certificateName}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-actions">
+                  <button type="submit" disabled={loading} className="submit-btn">
+                    {loading ? 'Saving...' : 'Save Profile'}
+                  </button>
+                </div>
+              </form>
             </div>
-          </form>
-        </div>
+          </>
+        )}
       </div>
 
-      {cropModalOpen && (
+      {/* Only show crop modal when user is not blocked */}
+      {userStatus !== 'BLOCKED' && !isBlocked && cropModalOpen && (
         <div className="cropper-overlay">
           <div className="cropper-modal">
             <h3>Crop your photo</h3>

@@ -272,9 +272,95 @@
   background: #e4e4eb;
 }
 
+/* Blocked User Notification */
+.blocked-notification {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 2px solid #f59e0b;
+  border-radius: 12px;
+  padding: 2rem;
+  margin: 2rem auto;
+  max-width: 800px;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);
+}
+
+.blocked-notification-content {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.blocked-icon {
+  font-size: 2rem;
+  flex-shrink: 0;
+}
+
+.blocked-message h3 {
+  margin: 0 0 0.75rem 0;
+  color: #92400e;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.blocked-message p {
+  margin: 0.5rem 0;
+  color: #78350f;
+  font-size: 1rem;
+}
+
+.blocked-contact-info {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.blocked-contact-info p {
+  margin: 0.5rem 0;
+  color: #78350f;
+  font-size: 0.95rem;
+}
+
+.blocked-contact-info strong {
+  color: #92400e;
+  font-weight: 600;
+}
+
+/* Block Reason Display */
+.block-reason-display {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 8px;
+  border-left: 3px solid #f59e0b;
+}
+
+.block-reason-label {
+  margin: 0 0 0.5rem 0;
+  color: #92400e;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.block-reason-text {
+  margin: 0;
+  color: #78350f;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
 @media (max-width: 768px) {
   .profile-header-card {
     grid-template-columns: 1fr;
+  }
+
+  .blocked-notification-content {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .blocked-icon {
+    align-self: center;
   }
 }
 
