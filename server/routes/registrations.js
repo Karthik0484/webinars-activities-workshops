@@ -1,6 +1,7 @@
 import express from 'express';
 import { verifyClerkToken } from '../middleware/clerkAuth.js';
 import { verifyAdminToken } from '../middleware/adminAuth.js';
+import { checkUserStatus } from '../middleware/checkUserStatus.js';
 import {
     registerForWorkshop,
     getMyRegistrations,
@@ -10,9 +11,9 @@ import {
 
 const router = express.Router();
 
-// User routes
-router.post('/', verifyClerkToken, registerForWorkshop);
-router.get('/my', verifyClerkToken, getMyRegistrations);
+// User routes - block blocked users from registering
+router.post('/', verifyClerkToken, checkUserStatus, registerForWorkshop);
+router.get('/my', verifyClerkToken, checkUserStatus, getMyRegistrations);
 
 // Admin routes
 router.get('/event/:workshopId', verifyAdminToken, getWorkshopRegistrations);

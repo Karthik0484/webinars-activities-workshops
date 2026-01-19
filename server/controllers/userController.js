@@ -23,7 +23,7 @@ export async function createOrUpdateProfile(req, res) {
     if (!user) {
       // Generate AKVORA ID for new user
       const { akvoraId, year, counter } = await generateAkvoraId();
-      
+
       user = await User.create({
         clerkId,
         akvoraId,
@@ -52,14 +52,14 @@ export async function createOrUpdateProfile(req, res) {
       }
       user.emailVerified = true; // OAuth users have verified emails
       user.profileCompleted = true;
-      
+
       // Generate AKVORA ID if not exists
       if (!user.akvoraId) {
         const { akvoraId, year } = await generateAkvoraId();
         user.akvoraId = akvoraId;
         user.registeredYear = year;
       }
-      
+
       await user.save();
     }
 
@@ -91,23 +91,58 @@ export async function createOrUpdateProfile(req, res) {
 /**
  * Get user profile
  */
+import bcrypt from 'bcryptjs';
+
+/**
+ * Get user profile
+ * Automatically creates user in MongoDB if they exist in Clerk but not in DB
+ */
 export async function getProfile(req, res) {
   try {
-    const { clerkId, clerkEmail } = req;
+    const { clerkId, clerkEmail, clerkUser } = req;
 
     if (!clerkId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const user = await User.findOne({ clerkId });
+    let user = await User.findOne({ clerkId });
 
     if (!user) {
-      // Return 404 but include clerkId so frontend knows user exists in Clerk
-      return res.status(404).json({ 
-        error: 'User profile not found',
+      // User exists in Clerk but not in MongoDB
+      // Auto-create the user now
+      console.log(`Auto-creating user for Clerk ID: ${clerkId}`);
+
+      const { akvoraId, year } = await generateAkvoraId();
+
+      // Default to 'email' if we can't determine provider, or check clerkUser
+      // For this requirement, we assume email/password signup flow
+      let authProvider = 'email';
+
+      // If user has google, github in external accounts, we might switch
+      if (clerkUser?.externalAccounts?.length > 0) {
+        const provider = clerkUser.externalAccounts[0].provider; // e.g., 'oauth_google'
+        if (provider.includes('google')) authProvider = 'google';
+        if (provider.includes('github')) authProvider = 'github';
+      }
+
+      // Secure placeholder for password since Clerk handles it
+      // We must store SOMETHING to satisfy the requirement "password must be hashed"
+      const placeholderPassword = await bcrypt.hash('managed-by-clerk-secure', 10);
+
+      user = await User.create({
         clerkId,
-        clerkEmail: clerkEmail || null
+        akvoraId,
+        firstName: clerkUser?.firstName || '',
+        lastName: clerkUser?.lastName || '',
+        email: clerkEmail || '',
+        emailVerified: true, // Clerk users are verified
+        profileCompleted: false, // Let them complete profile on frontend
+        registeredYear: year,
+        authProvider,
+        password: placeholderPassword
       });
+
+      console.log('User auto-created:', user._id);
     }
 
     res.json({
@@ -123,7 +158,13 @@ export async function getProfile(req, res) {
         avatarUrl: user.avatarUrl,
         emailVerified: user.emailVerified,
         profileCompleted: user.profileCompleted,
-        registeredYear: user.registeredYear
+        registeredYear: user.registeredYear,
+        authProvider: user.authProvider,
+        isBlocked: user.isBlocked || false,
+        isDeleted: user.isDeleted || false,
+        status: user.status || (user.isDeleted ? 'DELETED' : user.isBlocked ? 'BLOCKED' : 'ACTIVE'),
+        blockReason: user.blockReason || '',
+        blockedAt: user.blockedAt || null
       }
     });
   } catch (error) {

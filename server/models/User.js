@@ -59,6 +59,32 @@ const userSchema = new mongoose.Schema({
   password: {
     type: String,
     default: ''
+  },
+  authProvider: {
+    type: String,
+    enum: ['email', 'google', 'github', 'clerk'],
+    default: 'email'
+  },
+  isBlocked: {
+    type: Boolean,
+    default: false
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false
+  },
+  status: {
+    type: String,
+    enum: ['ACTIVE', 'BLOCKED', 'DELETED'],
+    default: 'ACTIVE'
+  },
+  blockReason: {
+    type: String,
+    default: ''
+  },
+  blockedAt: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true

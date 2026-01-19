@@ -2,6 +2,14 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
+import { verifyAdminToken } from '../middleware/adminAuth.js';
+import { 
+  getEmailPasswordUsers, 
+  blockUser, 
+  unblockUser, 
+  deleteUser,
+  getAllUserProfiles
+} from '../controllers/adminController.js';
 
 const router = express.Router();
 
@@ -91,5 +99,20 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ error: 'Login failed' });
   }
 });
+
+// Get all email/password registered users (Admin only)
+router.get('/users', verifyAdminToken, getEmailPasswordUsers);
+
+// Block a user (Admin only)
+router.put('/users/:id/block', verifyAdminToken, blockUser);
+
+// Unblock a user (Admin only)
+router.put('/users/:id/unblock', verifyAdminToken, unblockUser);
+
+// Delete a user permanently (Admin only)
+router.delete('/users/:id', verifyAdminToken, deleteUser);
+
+// Get all user profiles (Admin only)
+router.get('/user-profiles', verifyAdminToken, getAllUserProfiles);
 
 export default router;

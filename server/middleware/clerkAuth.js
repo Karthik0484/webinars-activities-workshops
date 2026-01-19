@@ -1,5 +1,6 @@
 import { createClerkClient } from '@clerk/clerk-sdk-node';
 import dotenv from 'dotenv';
+import User from '../models/User.js';
 
 dotenv.config();
 
@@ -49,6 +50,47 @@ export async function verifyClerkToken(req, res, next) {
         req.clerkUser = sessionClaims;
         req.clerkId = userId;
         req.clerkEmail = sessionClaims.email || null;
+      }
+
+      // Check MongoDB user status for blocked/deleted users
+      if (req.clerkId) {
+        const mongoUser = await User.findOne({ clerkId: req.clerkId });
+        
+        if (mongoUser) {
+          // Check if user is deleted - always block deleted users
+          if (mongoUser.isDeleted) {
+            return res.status(403).json({ 
+              error: 'Your account has been deleted by admin' 
+            });
+          }
+          
+          // Determine status: prefer status field, fallback to isBlocked/isDeleted
+          let userStatus = mongoUser.status || 'ACTIVE';
+          if (mongoUser.isDeleted) {
+            userStatus = 'DELETED';
+          } else if (mongoUser.isBlocked && !mongoUser.status) {
+            userStatus = 'BLOCKED';
+          }
+
+          // Attach user status to request for route-specific handling
+          req.userStatus = {
+            status: userStatus,
+            isBlocked: mongoUser.isBlocked || false,
+            isDeleted: mongoUser.isDeleted || false,
+            blockReason: mongoUser.blockReason || '',
+            blockedAt: mongoUser.blockedAt || null,
+            mongoUser: mongoUser
+          };
+        } else {
+          req.userStatus = {
+            status: 'ACTIVE',
+            isBlocked: false,
+            isDeleted: false,
+            blockReason: '',
+            blockedAt: null,
+            mongoUser: null
+          };
+        }
       }
       
       next();
