@@ -12,7 +12,7 @@
   grid-template-columns: 1fr 1.4fr;
   gap: 1.5rem;
   background: linear-gradient(135deg, #667eea 0%, #6f9cf8 100%);
-  color: #fff;
+  color: #ffffff;
   border-radius: 12px;
   padding: 1.5rem;
   box-shadow: 0 10px 30px rgba(102, 126, 234, 0.25);
@@ -73,7 +73,7 @@
 
 .avatar-hint {
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(255, 249, 249, 0.85);
 }
 
 .id-block {
@@ -103,7 +103,7 @@
 }
 
 .profile-box {
-  background: white;
+  background: rgb(255, 255, 255);
   padding: 2rem;
   border-radius: 12px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
@@ -111,7 +111,7 @@
 
 .profile-box h1 {
   margin-bottom: 1.5rem;
-  color: #1f2933;
+  color: #5d4a4a;
 }
 
 .profile-form {
