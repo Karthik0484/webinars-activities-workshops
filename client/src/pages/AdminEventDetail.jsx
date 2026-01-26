@@ -4,6 +4,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import { Upload, X, CheckCircle, Loader2, Type, AlertCircle } from 'lucide-react';
 import { calculateEventStatus, getStatusLabel } from '../utils/eventStatus';
+import { useSocket } from '../context/SocketContext';
 import './AdminEventDetail.css';
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -39,15 +40,73 @@ function AdminEventDetail() {
         fetchEventDetails();
     }, [id]);
 
+    // Socket.IO Real-time Updates
+    const socket = useSocket();
+    useEffect(() => {
+        if (!socket) return;
+
+        const handleNewRegistration = (data) => {
+            if (data.eventId === id) {
+                toast.success(`New registration: ${data.user.name}`);
+
+                // Add to registrations list
+                const newReg = {
+                    _id: data.user.userId, // or registration ID if available
+                    user: {
+                        firstName: data.user.name.split(' ')[0],
+                        lastName: data.user.name.split(' ').slice(1).join(' '),
+                        email: data.user.email,
+                        akvoraId: data.user.akvoraId || data.user.userId
+                    },
+                    status: data.status,
+                    paymentStatus: data.status === 'approved' ? 'APPROVED' : 'PENDING',
+                    upiReference: data.upiReference || 'N/A',
+                    createdAt: new Date().toISOString()
+                };
+
+                setRegistrations(prev => [newReg, ...prev]);
+
+                // Also refresh full details to be safe (e.g. participant counts)
+                fetchEventDetails();
+            }
+        };
+
+        socket.on('registration:new', handleNewRegistration);
+
+        return () => {
+            socket.off('registration:new', handleNewRegistration);
+        };
+    }, [socket, id]);
+
     const fetchEventDetails = async () => {
         try {
             const token = localStorage.getItem('adminToken');
             const response = await axios.get(`${API_URL}/events/${id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setEvent(response.data.event);
-            if (response.data.event.type === 'workshop') {
+            const eventData = response.data.event;
+            setEvent(eventData);
+
+            if (eventData.type === 'workshop') {
                 fetchRegistrations();
+            } else {
+                // For Webinars/Internships, map participants to registrations format
+                const mappedRegistrations = (eventData.participants || []).map(p => ({
+                    _id: p.userId, // Use userId as unique key for list
+                    user: {
+                        firstName: p.name.split(' ')[0],
+                        lastName: p.name.split(' ').slice(1).join(' '),
+                        email: p.email,
+                        akvoraId: p.akvoraId || p.userId // Use enriched akvoraId, fallback to userId
+                    },
+                    status: p.status || 'approved',
+                    paymentStatus: p.paymentStatus || 'APPROVED',
+                    upiReference: 'N/A', // Not applicable for direct event registrations usually
+                    createdAt: p.registeredAt
+                }));
+                // Sort by newest first
+                mappedRegistrations.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                setRegistrations(mappedRegistrations);
             }
         } catch (error) {
             console.error('Failed to fetch event:', error);
@@ -80,7 +139,7 @@ function AdminEventDetail() {
             registeredAt: r.createdAt,
             akvoraId: r.user.akvoraId
         }))
-        : event?.participants || [];
+        : (event?.participants || []).filter(p => p.status === 'approved');
 
     const handleRejectClick = (regId) => {
         setRejectingId(regId);
@@ -98,23 +157,45 @@ function AdminEventDetail() {
     const handleUpdateRegistrationStatus = async (regId, status, reason = '') => {
         try {
             const token = localStorage.getItem('adminToken');
-            const payload = { status };
-            if (status === 'rejected') {
-                payload.rejectionReason = reason;
-            }
 
-            const response = await axios.put(`${API_URL}/registrations/${regId}/status`, payload, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            if (event.type === 'workshop') {
+                // Existing workshop logic
+                const payload = { status };
+                if (status === 'rejected') {
+                    payload.rejectionReason = reason;
+                }
 
-            if (response.data.success) {
-                setRegistrations(prev => prev.map(reg =>
-                    reg._id === regId ? { ...reg, status } : reg
-                ));
-                fetchEventDetails();
-                toast.success(`Registration ${status} successfully`);
+                const response = await axios.put(`${API_URL}/registrations/${regId}/status`, payload, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+
+                if (response.data.success) {
+                    setRegistrations(prev => prev.map(reg =>
+                        reg._id === regId ? { ...reg, status } : reg
+                    ));
+                    fetchEventDetails();
+                    toast.success(`Registration ${status} successfully`);
+                }
+            } else {
+                // New logic for Webinars/Internships
+                // regId here is actually the userId from our mapping above
+                const response = await axios.put(`${API_URL}/events/${event._id}/participants/${regId}/status`, {
+                    status,
+                    rejectionReason: reason
+                }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+
+                if (response.data.success) {
+                    setRegistrations(prev => prev.map(reg =>
+                        reg._id === regId ? { ...reg, status } : reg
+                    ));
+                    fetchEventDetails(); // Refresh to update participants list
+                    toast.success(`Participant status updated to ${status}`);
+                }
             }
         } catch (error) {
+            console.error('Update status error:', error);
             toast.error('Failed to update status');
         }
     };
@@ -314,15 +395,15 @@ function AdminEventDetail() {
                     </div>
                 </section>
 
-                {event.type === 'workshop' && (
+                {(event.type === 'workshop' || event.type === 'webinar' || event.type === 'internship') && (
                     <section className="registrations-verification-section">
-                        <h3>Verify Workshop Registrations</h3>
+                        <h3>Verify {event.type.charAt(0).toUpperCase() + event.type.slice(1)} Registrations</h3>
                         <div className="table-responsive">
                             <table className="registrations-table">
                                 <thead>
                                     <tr>
                                         <th>Student</th>
-                                        <th>UPI Reference</th>
+                                        {event.type === 'workshop' && <th>UPI Reference</th>}
                                         <th>Status</th>
                                         <th>Actions</th>
                                     </tr>
@@ -336,7 +417,7 @@ function AdminEventDetail() {
                                                     <small>{reg.user.akvoraId}</small>
                                                 </div>
                                             </td>
-                                            <td><code>{reg.upiReference}</code></td>
+                                            {event.type === 'workshop' && <td><code>{reg.upiReference}</code></td>}
                                             <td>
                                                 <span className={`admin-status-badge ${(reg.status || reg.paymentStatus || 'pending').toLowerCase()}`}>
                                                     {reg.status || reg.paymentStatus || 'Pending'}
@@ -358,7 +439,7 @@ function AdminEventDetail() {
                                         </tr>
                                     ))}
                                     {registrations.length === 0 && (
-                                        <tr><td colSpan="4" className="no-data">No registration requests found</td></tr>
+                                        <tr><td colSpan={event.type === 'workshop' ? "4" : "3"} className="no-data">No registration requests found</td></tr>
                                     )}
                                 </tbody>
                             </table>

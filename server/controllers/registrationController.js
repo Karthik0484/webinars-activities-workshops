@@ -95,6 +95,32 @@ export async function registerForWorkshop(req, res) {
             }
         }
 
+        // Socket.IO Real-time Updates
+        const io = req.app.get('io');
+        if (io) {
+            // Notify Admin (New Registration)
+            io.to('admin').emit('registration:new', {
+                type: 'workshop',
+                eventId: workshopId,
+                user: {
+                    name: `${user.firstName} ${user.lastName}`,
+                    email: user.email,
+                    userId: user.clerkId,
+                    akvoraId: user.akvoraId
+                },
+                status: initialStatus,
+                upiReference: isFree ? 'FREE' : upiReference
+            });
+
+            // Notify User
+            io.to(`user:${user.clerkId}`).emit('registration:status-updated', {
+                eventId: workshopId,
+                status: initialStatus,
+                paymentStatus: initialPaymentStatus,
+                meetingLink: isFree ? workshop.meetingLink : undefined
+            });
+        }
+
         res.status(201).json({
             success: true,
             message: 'Registration submitted successfully. Pending verification.',
@@ -262,18 +288,22 @@ export async function updateRegistrationStatus(req, res) {
         if (io) {
             io.to(`user:${user.clerkId}`).emit('registration:status-updated', {
                 registrationId: registration._id,
+                eventId: workshop._id, // Add eventId for consistency
                 status,
+                paymentStatus: registration.paymentStatus, // Include payment status
                 workshop: {
                     id: workshop._id,
                     title: workshop.title
                 },
-                message: notificationMessage
+                message: notificationMessage,
+                meetingLink: status === 'approved' ? workshop.meetingLink : undefined // Send meeting link if approved
             });
 
             // Emit to admin for participant count update
             io.to('admin').emit('stats:updated', {
                 type: 'registration',
-                action: status
+                action: status,
+                eventId: workshop._id
             });
         }
 
@@ -330,7 +360,7 @@ export async function getUserParticipationHistory(req, res) {
         const events = await Event.find({
             'participants.userId': clerkId,
             type: { $in: ['webinar', 'internship'] }
-        }).select('title type date endDate status imageUrl participants instructor').sort({ date: -1 });
+        }).select('title type date endDate status imageUrl participants instructor meetingLink').sort({ date: -1 });
 
         const webinars = [];
         const internships = [];
@@ -341,21 +371,28 @@ export async function getUserParticipationHistory(req, res) {
             const participant = event.participants.find(p => p.userId === clerkId);
 
             // Determine status based on dates
-            let status = 'Registered';
+            let eventStatus = 'Registered';
             if (event.endDate && new Date(event.endDate) < now) {
-                status = 'Completed';
+                eventStatus = 'Completed';
             }
+
+            // Get registration status from participant record
+            // Default to 'approved' for backward compatibility with old records
+            const registrationStatus = participant ? (participant.status || 'approved') : 'approved';
 
             const item = {
                 id: event._id,
                 title: event.title,
                 type: event.type,
-                status: status,
+                status: eventStatus,
                 date: event.date,
                 endDate: event.endDate,
                 imageUrl: event.imageUrl,
                 instructor: event.instructor, // Include instructor
-                registeredAt: participant ? participant.registeredAt : null
+                // Only include meeting link if status is approved
+                meetingLink: registrationStatus === 'approved' ? event.meetingLink : undefined,
+                registeredAt: participant ? participant.registeredAt : null,
+                registrationStatus: registrationStatus
             };
 
             if (event.type === 'webinar') {

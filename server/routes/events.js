@@ -150,9 +150,30 @@ router.get('/:id', adminAuth, async (req, res) => {
       return res.status(404).json({ error: 'Event not found' });
     }
 
+    // Convert event to object to allow modification
+    const eventObj = event.toObject();
+
+    // If event has participants, fetch their Akvora IDs
+    if (eventObj.participants && eventObj.participants.length > 0) {
+      const userIds = eventObj.participants.map(p => p.userId);
+      const users = await User.find({ clerkId: { $in: userIds } }).select('clerkId akvoraId');
+
+      // Create a map of clerkId -> akvoraId
+      const userMap = {};
+      users.forEach(u => {
+        userMap[u.clerkId] = u.akvoraId;
+      });
+
+      // Attach akvoraId to each participant
+      eventObj.participants = eventObj.participants.map(p => ({
+        ...p,
+        akvoraId: userMap[p.userId] || 'N/A'
+      }));
+    }
+
     res.json({
       success: true,
-      event
+      event: eventObj
     });
   } catch (error) {
     console.error('Get event error:', error);
@@ -267,20 +288,52 @@ router.post('/:eventId/register', async (req, res) => {
       return res.status(400).json({ error: 'Already registered for this event' });
     }
 
+    // Determine status based on price
+    const isFree = !event.price || event.price === 0;
+    const initialStatus = isFree ? 'approved' : 'pending';
+    const initialPaymentStatus = isFree ? 'APPROVED' : 'PENDING';
+
     // Add user to participants
     event.participants.push({
       userId,
       email: userEmail,
       name: userName || 'User',
-      registeredAt: new Date()
+      registeredAt: new Date(),
+      status: initialStatus,
+      paymentStatus: initialPaymentStatus
     });
 
     await event.save();
 
+    // Socket.IO Real-time Updates
+    const io = req.app.get('io');
+    if (io) {
+      // Notify Admin (New Registration)
+      io.to('admin').emit('registration:new', {
+        type: event.type,
+        eventId: event._id,
+        user: {
+          name: userName || 'User',
+          email: userEmail,
+          userId: userId
+        },
+        status: initialStatus
+      });
+
+      // Notify User (Status Update / Registration Success)
+      io.to(`user:${userId}`).emit('registration:status-updated', {
+        eventId: event._id,
+        status: initialStatus,
+        paymentStatus: initialPaymentStatus,
+        meetingLink: isFree ? event.meetingLink : undefined
+      });
+    }
+
     res.json({
       success: true,
-      message: 'Successfully registered for event',
-      participantCount: event.participants.length
+      message: isFree ? 'Successfully registered for event' : 'Registration submitted. Pending approval.',
+      participantCount: event.participants.length,
+      status: initialStatus
     });
   } catch (error) {
     console.error('Event registration error:', error);
@@ -362,6 +415,74 @@ router.get('/stats/dashboard', adminAuth, async (req, res) => {
   } catch (error) {
     console.error('Get stats error:', error);
     res.status(500).json({ error: 'Failed to fetch statistics' });
+  }
+});
+
+// Update participant status (for Webinars/Internships)
+router.put('/:eventId/participants/:userId/status', adminAuth, async (req, res) => {
+  try {
+    const { status, rejectionReason } = req.body;
+    const { eventId, userId } = req.params;
+
+    if (!['pending', 'approved', 'rejected'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    const event = await Event.findById(eventId);
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    const participantIndex = event.participants.findIndex(p => p.userId === userId);
+    if (participantIndex === -1) {
+      return res.status(404).json({ error: 'Participant not found' });
+    }
+
+    // Update status
+    event.participants[participantIndex].status = status;
+
+    // Update payment status based on status
+    if (status === 'approved') {
+      event.participants[participantIndex].paymentStatus = 'APPROVED';
+    } else if (status === 'rejected') {
+      event.participants[participantIndex].paymentStatus = 'REJECTED';
+    } else {
+      event.participants[participantIndex].paymentStatus = 'PENDING';
+    }
+
+    await event.save();
+
+    // Socket.IO Real-time Updates
+    const io = req.app.get('io');
+    if (io) {
+      // Notify User
+      io.to(`user:${userId}`).emit('registration:status-updated', {
+        eventId: event._id,
+        status: status,
+        paymentStatus: event.participants[participantIndex].paymentStatus,
+        meetingLink: status === 'approved' ? event.meetingLink : undefined,
+        rejectionReason: status === 'rejected' ? rejectionReason : undefined
+      });
+
+      // Notify Admin (Stats Update)
+      io.to('admin').emit('stats:updated', {
+        type: event.type,
+        eventId: event._id
+      });
+    }
+
+    // Send notification
+    // Note: In a real app, we would import createNotification here
+    // For now, we'll assume the frontend handles polling or the user sees it on refresh
+
+    res.json({
+      success: true,
+      message: `Participant status updated to ${status}`,
+      participant: event.participants[participantIndex]
+    });
+  } catch (error) {
+    console.error('Update participant status error:', error);
+    res.status(500).json({ error: 'Failed to update participant status' });
   }
 });
 

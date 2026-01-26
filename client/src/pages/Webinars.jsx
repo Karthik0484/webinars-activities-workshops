@@ -2,21 +2,84 @@ import { useState, useEffect } from 'react';
 import { SignIn as ClerkSignIn, useAuth, useUser } from '@clerk/clerk-react';
 import toast from 'react-hot-toast';
 import { calculateEventStatus, getStatusLabel } from '../utils/eventStatus';
+import { useSocket } from '../context/SocketContext';
 import './Webinars.css';
 import api, { setAuthToken, API_URL } from '../services/api';
 
 
 function Webinars() {
   const [webinars, setWebinars] = useState([]);
+  const [myRegistrations, setMyRegistrations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [previewImage, setPreviewImage] = useState(null);
   const { isSignedIn, user } = useUser();
   const { getToken } = useAuth();
+  const socket = useSocket();
 
   useEffect(() => {
     fetchWebinars();
-  }, []);
+    if (isSignedIn) {
+      fetchMyRegistrations();
+    }
+  }, [isSignedIn]);
+
+  // Listen for real-time updates
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleStatusUpdate = (data) => {
+      // Update myRegistrations with new status
+      setMyRegistrations(prev => {
+        const existing = prev.find(r => r.id === data.eventId);
+        if (existing) {
+          return prev.map(r => r.id === data.eventId ? {
+            ...r,
+            registrationStatus: data.status,
+            meetingLink: data.meetingLink
+          } : r);
+        } else {
+          // If it's a new registration that wasn't in the list yet (rare race condition but possible)
+          // We might need to fetch again or just add it if we had full event data
+          // Ideally we fetchMyRegistrations again to be safe and get full object
+          fetchMyRegistrations();
+          return prev;
+        }
+      });
+
+      // Also update the main webinars list to reflect participant count if needed
+      // (Though participant count usually comes from fetchWebinars)
+      fetchWebinars();
+
+      if (data.status === 'approved') {
+        toast.success('Your registration has been approved!');
+      } else if (data.status === 'rejected') {
+        toast.error(`Registration rejected: ${data.rejectionReason || 'Contact support'}`);
+      }
+    };
+
+    socket.on('registration:status-updated', handleStatusUpdate);
+
+    return () => {
+      socket.off('registration:status-updated', handleStatusUpdate);
+    };
+  }, [socket]);
+
+  const fetchMyRegistrations = async () => {
+    try {
+      const token = await getToken();
+      const response = await axios.get(`${API_URL}/registrations/history`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (response.data.success) {
+        setMyRegistrations(response.data.history.webinars || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch registrations', error);
+    }
+  };
 
   const fetchWebinars = async () => {
     try {
@@ -50,6 +113,7 @@ function Webinars() {
         toast.success(response.data.message);
         // Refresh webinars to update participant count
         fetchWebinars();
+        fetchMyRegistrations();
       }
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to register for webinar');
@@ -162,6 +226,11 @@ function Webinars() {
                         participant => participant.userId === user?.id
                       );
 
+                      // Check if we have the meeting link and status in myRegistrations
+                      const myRegistration = myRegistrations.find(r => r.id === webinar._id);
+                      const meetingLink = myRegistration?.meetingLink;
+                      const registrationStatus = myRegistration?.registrationStatus || (isRegistered ? 'approved' : null);
+
                       if (!isSignedIn) {
                         return (
                           <button
@@ -172,14 +241,22 @@ function Webinars() {
                           </button>
                         );
                       } else if (isRegistered) {
+                        if (registrationStatus === 'pending') {
+                          return (
+                            <button className="register-btn pending" disabled style={{ background: '#f59e0b', cursor: 'not-allowed' }}>
+                              Verification Pending
+                            </button>
+                          );
+                        }
+
                         return (
                           <div className="registered-actions" style={{ display: 'flex', gap: '10px' }}>
                             <button className="register-btn registered" disabled>
                               ✓ Registered
                             </button>
-                            {webinar.meetingLink && (
+                            {meetingLink ? (
                               <a
-                                href={webinar.meetingLink}
+                                href={meetingLink}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="register-btn"
@@ -187,6 +264,19 @@ function Webinars() {
                               >
                                 Join Meeting
                               </a>
+                            ) : (
+                              // Fallback if meeting link is not yet available (e.g. pending approval for paid events)
+                              webinar.meetingLink && registrationStatus === 'approved' && (
+                                <a
+                                  href={webinar.meetingLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="register-btn"
+                                  style={{ textDecoration: 'none', textAlign: 'center', background: '#4f46e5' }}
+                                >
+                                  Join Meeting
+                                </a>
+                              )
                             )}
                           </div>
                         );

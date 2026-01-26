@@ -124,6 +124,16 @@ const eventSchema = new mongoose.Schema({
     registeredAt: {
       type: Date,
       default: Date.now
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'approved'
+    },
+    paymentStatus: {
+      type: String,
+      enum: ['PENDING', 'APPROVED', 'REJECTED'],
+      default: 'APPROVED'
     }
   }]
 }, {
