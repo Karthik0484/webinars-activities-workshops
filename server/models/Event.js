@@ -60,6 +60,10 @@ const eventSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  imageFileId: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: false
+  },
   tags: [{
     type: String,
     trim: true

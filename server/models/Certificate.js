@@ -20,6 +20,10 @@ const certificateSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    certificateFileId: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: false
+    },
     certificateTitle: {
         type: String,
         required: true,

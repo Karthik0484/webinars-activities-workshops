@@ -59,9 +59,15 @@ app.use("/uploads", express.static(uploadsDir));
 app.set('io', io);
 
 // Routes
+import fileRoutes from './routes/files.js';
+
+// ... (other imports)
+
+// Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes); // Allowed for blocked users (profile access)
+app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/files', fileRoutes); // New Route for files
 
 // Protected routes (Blocked users cannot access)
 app.use('/api/events', checkBlocked, eventRoutes);

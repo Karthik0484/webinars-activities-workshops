@@ -199,7 +199,10 @@ function AdminCertificateManage() {
                                     </div>
                                     <div className="cert-card-actions">
                                         <a
-                                            href={`${API_URL.replace('/api', '')}${cert.certificateUrl}`}
+                                            href={cert.certificateFileId
+                                                ? `${API_URL}/files/admin/view/${cert.certificateFileId}`
+                                                : `${API_URL.replace('/api', '')}${cert.certificateUrl}`
+                                            }
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="icon-btn view-btn"

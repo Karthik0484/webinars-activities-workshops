@@ -2,6 +2,8 @@ import Certificate from '../models/Certificate.js';
 import User from '../models/User.js';
 import Event from '../models/Event.js';
 import { createNotification } from './notificationController.js';
+import mongoose from 'mongoose';
+import { uploadToGridFS, deleteFromGridFS } from '../utils/gridfs.js';
 
 export const uploadCertificate = async (req, res) => {
     try {
@@ -27,11 +29,15 @@ export const uploadCertificate = async (req, res) => {
             }
         }
 
+        // Upload to GridFS
+        const fileResult = await uploadToGridFS(req.file.buffer, req.file.originalname, req.file.mimetype);
+
         // Construct file URL
-        const certificateUrl = `/uploads/certificates/${req.file.filename}`;
+        const certificateUrl = `/api/files/certificate/${fileResult.id}`;
+        const certificateFileId = fileResult.id;
 
         // Create or update certificate
-        // Check if certificate already exists for this user and event
+        // Check ifCertificate already exists for this user and event
         // Only if eventId is provided (manual uploads get new entries)
         let existingCert = null;
         if (eventId && eventId !== 'undefined' && eventId !== 'null') {
@@ -44,7 +50,11 @@ export const uploadCertificate = async (req, res) => {
         let certificate;
         if (existingCert) {
             // Update existing
+            if (existingCert.certificateFileId) {
+                await deleteFromGridFS(existingCert.certificateFileId);
+            }
             existingCert.certificateUrl = certificateUrl;
+            existingCert.certificateFileId = certificateFileId;
             existingCert.certificateTitle = certificateTitle || existingCert.certificateTitle;
             certificate = await existingCert.save();
         } else {
@@ -54,7 +64,8 @@ export const uploadCertificate = async (req, res) => {
                 eventId: (eventId && eventId !== 'undefined' && eventId !== 'null') ? eventId : null,
                 akvoraId: user.akvoraId,
                 certificateTitle: certificateTitle || 'Certificate of Achievement',
-                certificateUrl
+                certificateUrl,
+                certificateFileId
             });
         }
 
@@ -238,16 +249,22 @@ export const deleteCertificate = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const certificate = await Certificate.findByIdAndDelete(id);
+        const certificate = await Certificate.findById(id);
 
         if (!certificate) {
             return res.status(404).json({ error: 'Certificate not found' });
         }
 
-        // Ideally we should also delete the file from filesystem here
-        // But for safety/simplicity we'll keep the file or implementing fs.unlink check
-        // import fs from 'fs'; import path from 'path'; ...
-        // For now, just removing the database record is sufficient for the UI.
+        // Delete from GridFS if fileId exists
+        if (certificate.certificateFileId) {
+            await deleteFromGridFS(certificate.certificateFileId);
+        }
+        // Legacy file cleanup
+        else if (certificate.certificateUrl && certificate.certificateUrl.includes('/uploads/certificates/')) {
+            // Logic to delete local file (skipped for now as per previous logic, or can be added if crucial)
+        }
+
+        await Certificate.findByIdAndDelete(id);
 
         res.json({
             success: true,

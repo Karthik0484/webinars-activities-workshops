@@ -14,29 +14,12 @@ import {
     updateCertificate,
     deleteCertificate
 } from '../controllers/certificateController.js';
+import { storage } from '../config/storage.js';
 
 const router = express.Router();
 
 // Multer setup for certificate uploads
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const uploadsDir = path.join(__dirname, '..', 'uploads', 'certificates');
 
-if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, uploadsDir);
-    },
-    filename: function (req, file, cb) {
-        const ext = path.extname(file.originalname);
-        const nameProp = req.body.akvoraId ? req.body.akvoraId.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'unknown';
-        const safeName = `CERT-${nameProp}-${Date.now()}${ext}`;
-        cb(null, safeName);
-    }
-});
 
 const upload = multer({
     storage,

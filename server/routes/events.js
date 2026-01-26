@@ -4,34 +4,17 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import mongoose from 'mongoose';
 import Event from '../models/Event.js';
 import User from '../models/User.js';
 import { adminAuth } from '../middleware/adminAuth.js';
+import { storage } from '../config/storage.js';
+import { uploadToGridFS, deleteFromGridFS } from '../utils/gridfs.js';
 
 const router = express.Router();
 
-// Multer setup for event image uploads
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const uploadsDir = path.join(__dirname, '..', 'uploads', 'events');
-
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadsDir);
-  },
-  filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname);
-    const safeName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-    cb(null, safeName);
-  }
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(), // Use memory storage to get file buffer
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: (req, file, cb) => {
     if (!file.mimetype.startsWith('image/')) {
@@ -40,8 +23,6 @@ const upload = multer({
     cb(null, true);
   }
 });
-
-
 
 // Custom upload middleware to handle errors
 const uploadMiddleware = (req, res, next) => {
@@ -62,7 +43,6 @@ const uploadMiddleware = (req, res, next) => {
 const parseListField = (field) => {
   if (!field) return [];
   if (Array.isArray(field)) return field;
-  // If it's a string containing commas (for tags) or just a string
   return field.split(',').map(item => item.trim()).filter(item => item);
 };
 
@@ -76,7 +56,6 @@ router.post('/', adminAuth, uploadMiddleware, async (req, res) => {
       createdBy: req.admin.userId
     };
 
-    // Handle list fields that might come as strings from FormData
     if (typeof req.body.tags === 'string') {
       eventData.tags = parseListField(req.body.tags);
     }
@@ -89,7 +68,9 @@ router.post('/', adminAuth, uploadMiddleware, async (req, res) => {
 
     // Add image URL if image was uploaded
     if (req.file) {
-      eventData.imageUrl = `/uploads/events/${req.file.filename}`;
+      const result = await uploadToGridFS(req.file.buffer, req.file.originalname, req.file.mimetype);
+      eventData.imageFileId = result.id;
+      eventData.imageUrl = `/api/files/image/${result.id}`;
     }
 
     const event = new Event(eventData);
@@ -115,20 +96,17 @@ router.get('/', adminAuth, async (req, res) => {
 
     if (type) filter.type = type;
 
-    // Filter by calculated status based on dates
     if (status) {
       if (status === 'completed') {
-        // Event is completed if endDate is in the past
         filter.endDate = { $lt: now };
       } else if (status === 'active') {
-        // Event is active (upcoming or ongoing) if endDate is in the future
         filter.endDate = { $gte: now };
       }
     }
 
     const events = await Event.find(filter)
       .populate('createdBy', 'firstName lastName email')
-      .sort({ date: status === 'completed' ? -1 : 1 }); // Sort completed by newest first, active by soonest first
+      .sort({ date: status === 'completed' ? -1 : 1 });
 
     res.json({
       success: true,
@@ -150,21 +128,17 @@ router.get('/:id', adminAuth, async (req, res) => {
       return res.status(404).json({ error: 'Event not found' });
     }
 
-    // Convert event to object to allow modification
     const eventObj = event.toObject();
 
-    // If event has participants, fetch their Akvora IDs
     if (eventObj.participants && eventObj.participants.length > 0) {
       const userIds = eventObj.participants.map(p => p.userId);
       const users = await User.find({ clerkId: { $in: userIds } }).select('clerkId akvoraId');
 
-      // Create a map of clerkId -> akvoraId
       const userMap = {};
       users.forEach(u => {
         userMap[u.clerkId] = u.akvoraId;
       });
 
-      // Attach akvoraId to each participant
       eventObj.participants = eventObj.participants.map(p => ({
         ...p,
         akvoraId: userMap[p.userId] || 'N/A'
@@ -190,14 +164,12 @@ router.put('/:id', adminAuth, uploadMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Event not found' });
     }
 
-    // Check if admin created this event
     if (event.createdBy.toString() !== req.admin.userId) {
       return res.status(403).json({ error: 'Not authorized to update this event' });
     }
 
     const updateData = { ...req.body };
 
-    // Handle list fields
     if (typeof req.body.tags === 'string') {
       updateData.tags = parseListField(req.body.tags);
     }
@@ -210,10 +182,17 @@ router.put('/:id', adminAuth, uploadMiddleware, async (req, res) => {
 
     // Add image URL if new image was uploaded
     if (req.file) {
-      updateData.imageUrl = `/uploads/events/${req.file.filename}`;
+      const result = await uploadToGridFS(req.file.buffer, req.file.originalname, req.file.mimetype);
+      updateData.imageFileId = result.id;
+      updateData.imageUrl = `/api/files/image/${result.id}`;
 
       // Delete old image if it exists
-      if (event.imageUrl && event.imageUrl.startsWith('/uploads/events/')) {
+      if (event.imageFileId) {
+        await deleteFromGridFS(event.imageFileId);
+      } else if (event.imageUrl && event.imageUrl.startsWith('/uploads/events/')) {
+        // Fallback for legacy local files
+        const __filename = fileURLToPath(import.meta.url);
+        const __dirname = path.dirname(__filename);
         const oldImagePath = path.join(__dirname, '..', event.imageUrl);
         if (fs.existsSync(oldImagePath)) {
           fs.unlinkSync(oldImagePath);
@@ -247,9 +226,20 @@ router.delete('/:id', adminAuth, async (req, res) => {
       return res.status(404).json({ error: 'Event not found' });
     }
 
-    // Check if admin created this event
     if (event.createdBy.toString() !== req.admin.userId) {
       return res.status(403).json({ error: 'Not authorized to delete this event' });
+    }
+
+    // Delete associated image
+    if (event.imageFileId) {
+      await deleteFromGridFS(event.imageFileId);
+    } else if (event.imageUrl && event.imageUrl.startsWith('/uploads/events/')) {
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = path.dirname(__filename);
+      const oldImagePath = path.join(__dirname, '..', event.imageUrl);
+      if (fs.existsSync(oldImagePath)) {
+        fs.unlinkSync(oldImagePath);
+      }
     }
 
     await Event.findByIdAndDelete(req.params.id);

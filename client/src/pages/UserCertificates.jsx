@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '@clerk/clerk-react';
+import toast from 'react-hot-toast';
 import { Download, Award, Calendar, Eye, Search, X } from 'lucide-react';
 import './UserCertificates.css';
 
@@ -33,21 +34,75 @@ function UserCertificates() {
         }
     };
 
-    const handleView = (cert) => {
-        // Build full URL
+    const fetchSecureFile = async (url) => {
+        try {
+            const token = await getToken();
+            const response = await axios.get(url, {
+                headers: { Authorization: `Bearer ${token}` },
+                responseType: 'blob'
+            });
+            return URL.createObjectURL(response.data);
+        } catch (error) {
+            console.error('Secure fetch error:', error);
+            throw error;
+        }
+    };
+
+    const handleView = async (cert) => {
         const url = `${API_URL.replace('/api', '')}${cert.certificateUrl}`;
 
-        // Mobile behavior: Open in new tab
-        if (window.innerWidth < 768) {
-            window.open(url, '_blank');
-            return;
-        }
+        try {
+            // For mobile, we might want to try opening a new tab, but with Auth it's hard.
+            // Best to show a modal with a "Download" button that triggers the blob download.
+            // Or just use the same modal logic for all.
 
-        // Desktop: Open modal preview
-        setViewingCert({
-            ...cert,
-            fullUrl: url
-        });
+            setViewingCert({ ...cert, loading: true });
+
+            const objectUrl = await fetchSecureFile(url);
+
+            setViewingCert({
+                ...cert,
+                fullUrl: objectUrl,
+                originalUrl: url, // Keep original for reference if needed
+                loading: false
+            });
+
+        } catch (error) {
+            toast.error('Failed to load certificate file');
+            setViewingCert(null);
+        }
+    };
+
+    const handleDownload = async (cert) => {
+        try {
+            const url = `${API_URL.replace('/api', '')}${cert.certificateUrl}`;
+            const token = await getToken();
+            const response = await axios.get(url, {
+                headers: { Authorization: `Bearer ${token}` },
+                responseType: 'blob'
+            });
+
+            // Create download link
+            const objectUrl = URL.createObjectURL(response.data);
+            const link = document.createElement('a');
+            link.href = objectUrl;
+            link.download = cert.certificateTitle || 'Certificate';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(objectUrl);
+
+        } catch (error) {
+            console.error("Download error", error);
+            toast.error("Failed to download certificate");
+        }
+    };
+
+    const closeModal = () => {
+        if (viewingCert?.fullUrl) {
+            URL.revokeObjectURL(viewingCert.fullUrl);
+        }
+        setViewingCert(null);
     };
 
     const filteredCertificates = certificates.filter(cert => {
@@ -96,15 +151,10 @@ function UserCertificates() {
                     {filteredCertificates.map((cert) => (
                         <div key={cert._id} className="certificate-card">
                             <div className="certificate-preview" onClick={() => handleView(cert)}>
-                                {cert.certificateUrl.endsWith('.pdf') ? (
-                                    <div className="pdf-preview">
-                                        <Award size={40} />
-                                        <span>PDF Document</span>
-                                    </div>
-                                ) : (
-                                    <img src={`${API_URL.replace('/api', '')}${cert.certificateUrl}`} alt="Certificate" />
-                                )}
-
+                                <div className="pdf-preview">
+                                    <Award size={40} />
+                                    <span>View Certificate</span>
+                                </div>
                             </div>
                             <div className="certificate-info">
                                 <h3 title={cert.certificateTitle || cert.eventId?.title}>{cert.certificateTitle || cert.eventId?.title || 'Achievement Certificate'}</h3>
@@ -132,16 +182,26 @@ function UserCertificates() {
                                     >
                                         <Eye size={16} /> View
                                     </button>
-                                    <a
-                                        href={`${API_URL.replace('/api', '')}${cert.certificateUrl}`}
-                                        download
-                                        target="_blank"
-                                        rel="noopener noreferrer"
+                                    <button
+                                        onClick={() => handleDownload(cert)}
                                         className="download-btn"
-                                        style={{ flex: 1 }}
+                                        style={{
+                                            flex: 1,
+                                            padding: '8px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '6px',
+                                            background: '#4f46e5',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '6px',
+                                            cursor: 'pointer',
+                                            fontWeight: 500
+                                        }}
                                     >
                                         <Download size={16} /> Download
-                                    </a>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -151,44 +211,50 @@ function UserCertificates() {
 
             {/* PREVIEW MODAL */}
             {viewingCert && (
-                <div className="modal-overlay" onClick={() => setViewingCert(null)} style={{
+                <div className="modal-overlay" onClick={closeModal} style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
                     background: 'rgba(0,0,0,0.8)', zIndex: 1000,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', pading: '20px'
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
                 }}>
                     <div className="preview-modal-content" onClick={e => e.stopPropagation()} style={{
                         background: 'transparent', maxWidth: '90vw', maxHeight: '90vh', position: 'relative'
                     }}>
-                        <button onClick={() => setViewingCert(null)} style={{
+                        <button onClick={closeModal} style={{
                             position: 'absolute', top: '-40px', right: 0,
                             background: 'none', border: 'none', color: 'white', cursor: 'pointer'
                         }}>
                             <X size={32} />
                         </button>
 
-                        {viewingCert.certificateUrl.endsWith('.pdf') ? (
-                            <iframe
-                                src={viewingCert.fullUrl}
-                                style={{ width: '80vw', height: '80vh', border: 'none', background: 'white', borderRadius: '8px' }}
-                                title="Certificate Preview"
-                            />
+                        {viewingCert.loading ? (
+                            <div style={{ color: 'white' }}>Loading certificate...</div>
                         ) : (
-                            <img
-                                src={viewingCert.fullUrl}
-                                alt="Certificate Full View"
-                                style={{ maxWidth: '100%', maxHeight: '85vh', borderRadius: '8px', boxShadow: '0 20px 50px rgba(0,0,0,0.3)' }}
-                            />
+                            <>
+                                {/* Check extension from ORIGINAL URL string to decide iframe (PDF) vs Img */}
+                                {viewingCert.certificateUrl.toLowerCase().endsWith('.pdf') ? (
+                                    <iframe
+                                        src={viewingCert.fullUrl}
+                                        style={{ width: '80vw', height: '80vh', border: 'none', background: 'white', borderRadius: '8px' }}
+                                        title="Certificate Preview"
+                                    />
+                                ) : (
+                                    <img
+                                        src={viewingCert.fullUrl}
+                                        alt="Certificate Full View"
+                                        style={{ maxWidth: '100%', maxHeight: '85vh', borderRadius: '8px', boxShadow: '0 20px 50px rgba(0,0,0,0.3)' }}
+                                    />
+                                )}
+                            </>
                         )}
 
                         <div style={{ textAlign: 'center', marginTop: '16px' }}>
-                            <a
-                                href={viewingCert.fullUrl}
-                                download
+                            <button
+                                onClick={() => handleDownload(viewingCert)}
                                 className="download-btn"
-                                style={{ display: 'inline-flex', padding: '10px 24px', fontSize: '16px' }}
+                                style={{ display: 'inline-flex', padding: '10px 24px', fontSize: '16px', cursor: 'pointer', border: 'none', borderRadius: '6px', background: 'white', color: '#4f46e5', alignItems: 'center', gap: '8px' }}
                             >
                                 <Download size={20} /> Download Original
-                            </a>
+                            </button>
                         </div>
                     </div>
                 </div>
