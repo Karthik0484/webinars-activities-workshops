@@ -33,7 +33,7 @@ function Profile() {
         phone: '',
         certificateName: ''
     });
-    const [registrations, setRegistrations] = useState([]);
+
 
     useEffect(() => {
         fetchProfile();
@@ -62,17 +62,7 @@ function Profile() {
                 setAvatarUrl(userData.avatarUrl || '');
                 setAvatarPreview(userData.avatarUrl || '');
 
-                // Fetch user's workshop registrations
-                try {
-                    const regResponse = await axios.get(`${API_URL}/registrations/my`, {
-                        headers: { Authorization: `Bearer ${token}` }
-                    });
-                    if (regResponse.data.success) {
-                        setRegistrations(regResponse.data.registrations);
-                    }
-                } catch (regErr) {
-                    console.log("Could not fetch registrations (might be blocked)");
-                }
+
             }
         } catch (error) {
             // Pre-fill with Clerk data for new users
@@ -364,41 +354,7 @@ function Profile() {
                 </form>
             </div>
 
-            {!globalBlocked && registrations.length > 0 && (
-                <div className="profile-box my-registrations">
-                    <h1>My Workshops</h1>
-                    <div className="registrations-list">
-                        {registrations.map((reg) => (
-                            <div key={reg._id} className="registration-item">
-                                <div className="reg-workshop-info">
-                                    <h3>{reg.workshop?.title}</h3>
-                                    <p>{new Date(reg.workshop?.date).toLocaleDateString()}</p>
-                                </div>
-                                <div className="reg-status-info">
-                                    {reg.status === 'approved' || reg.paymentStatus === 'APPROVED' ? (
-                                        <span className="status-badge approved">Approved</span>
-                                    ) : (reg.status === 'rejected' || reg.paymentStatus === 'REJECTED') ? (
-                                        <div className="rejected-status">
-                                            <span className="status-badge rejected">❌ Rejected</span>
-                                            {reg.rejectionReason && (
-                                                <p className="rejection-reason-text">Reason: {reg.rejectionReason}</p>
-                                            )}
-                                            <button
-                                                onClick={() => navigate('/workshops')}
-                                                className="re-register-btn"
-                                            >
-                                                Register Again
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <span className="status-badge pending">Pending</span>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
+
 
             {cropModalOpen && (
                 <div className="cropper-overlay">

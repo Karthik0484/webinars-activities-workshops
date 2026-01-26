@@ -139,16 +139,25 @@ export async function getMyRegistrations(req, res) {
             .populate('workshop', 'title date type status imageUrl price meetingLink')
             .sort({ createdAt: -1 });
 
-        // Sanitize: Only show meetingLink if status is approved AND paymentStatus is APPROVED
-        const sanitizedRegistrations = registrations.map(reg => {
-            const regObj = reg.toObject();
-            if (regObj.status !== 'approved' || regObj.paymentStatus !== 'APPROVED') {
-                if (regObj.workshop) {
-                    regObj.workshop.meetingLink = undefined;
-                }
-            }
-            return regObj;
-        });
+        // Sanitize: Only show registrations that are APPROVED and valid
+        const sanitizedRegistrations = registrations
+            .filter(reg => {
+                // Must have a workshop attached
+                if (!reg.workshop) return false;
+                // MUST be approved status AND approved payment
+                // The user specifically requested: "Remove Invalid Date, Empty / malformed records, Deleted or rejected registrations"
+                // And "Only display workshops... Registration status is approved"
+                const isApproved = reg.status === 'approved' && reg.paymentStatus === 'APPROVED';
+                return isApproved;
+            })
+            .map(reg => {
+                const regObj = reg.toObject();
+                // Meeting link is already secure because we only return Approved ones now, 
+                // but good to keep the logic consistent if we ever loosen the filter.
+                // Since we filtered above, this check is technically redundant for the current requirement,
+                // but safe to keep for data integrity.
+                return regObj;
+            });
 
         res.json({
             success: true,

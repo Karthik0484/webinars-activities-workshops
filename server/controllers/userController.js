@@ -193,8 +193,10 @@ export async function getAkvoraId(req, res) {
   }
 }
 
+import ProfileImage from '../models/ProfileImage.js';
+
 /**
- * Update user avatar (multipart upload)
+ * Update user avatar (MongoDB Buffer storage)
  */
 export async function updateAvatar(req, res) {
   try {
@@ -207,13 +209,11 @@ export async function updateAvatar(req, res) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const avatarUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
-
-    // Find or create user if they don't exist
+    // Find or create user
     let user = await User.findOne({ clerkId });
 
     if (!user) {
-      // Create user if they don't exist (for OAuth users)
+      // Create user if they don't exist
       const { akvoraId, year } = await generateAkvoraId();
       user = await User.create({
         clerkId,
@@ -221,17 +221,36 @@ export async function updateAvatar(req, res) {
         email: clerkEmail?.toLowerCase() || '',
         emailVerified: true,
         profileCompleted: false,
-        registeredYear: year,
-        avatarUrl
+        registeredYear: year
       });
-    } else {
-      // Update existing user
-      user.avatarUrl = avatarUrl;
-      if (!user.profileCompleted) {
-        user.profileCompleted = true;
-      }
-      await user.save();
     }
+
+    // Store image in ProfileImage collection
+    // Check if image already exists for this user
+    let profileImage = await ProfileImage.findOne({ userId: user._id });
+
+    if (profileImage) {
+      profileImage.data = req.file.buffer;
+      profileImage.contentType = req.file.mimetype;
+      profileImage.updatedAt = Date.now();
+      await profileImage.save();
+    } else {
+      await ProfileImage.create({
+        userId: user._id,
+        data: req.file.buffer,
+        contentType: req.file.mimetype
+      });
+    }
+
+    // Construct the API URL for the image
+    const avatarUrl = `${req.protocol}://${req.get('host')}/api/users/avatar/${user._id}`;
+
+    // Update user record
+    user.avatarUrl = avatarUrl;
+    if (!user.profileCompleted) {
+      user.profileCompleted = true;
+    }
+    await user.save();
 
     res.json({
       success: true,
@@ -252,10 +271,30 @@ export async function updateAvatar(req, res) {
     });
   } catch (error) {
     console.error('Update avatar error:', error);
-    if (error.code === 11000) {
-      return res.status(400).json({ error: 'AKVORA ID already exists. Please try again.' });
-    }
     res.status(500).json({ error: 'Failed to update avatar' });
+  }
+}
+
+/**
+ * Get user avatar
+ */
+export async function getAvatar(req, res) {
+  try {
+    const { userId } = req.params;
+
+    const profileImage = await ProfileImage.findOne({ userId });
+
+    if (!profileImage || !profileImage.data) {
+      // Redirect to default placeholder or return 404
+      // Returning 404 allows frontend to show fallback
+      return res.status(404).send('Image not found');
+    }
+
+    res.set('Content-Type', profileImage.contentType);
+    res.send(profileImage.data);
+  } catch (error) {
+    console.error('Get avatar error:', error);
+    res.status(500).send('Error fetching image');
   }
 }
 

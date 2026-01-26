@@ -4,29 +4,12 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { clerkMiddleware } from '../middleware/clerkAuth.js';
-import { createOrUpdateProfile, getProfile, getAkvoraId, updateAvatar } from '../controllers/userController.js';
+import { createOrUpdateProfile, getProfile, getAkvoraId, updateAvatar, getAvatar } from '../controllers/userController.js';
 
 const router = express.Router();
 
-// Multer setup for avatar uploads
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const uploadsDir = path.join(__dirname, '..', 'uploads');
-
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadsDir);
-  },
-  filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname);
-    const safeName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-    cb(null, safeName);
-  }
-});
+// Multer setup for avatar uploads - Changed to MemoryStorage for MongoDB persistence
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
@@ -39,12 +22,16 @@ const upload = multer({
   }
 });
 
+// Avatar endpoints - Public access for <img src> tags
+router.get('/avatar/:userId', getAvatar);
+
 // All user routes require authentication
 router.use(clerkMiddleware);
 
 router.post('/create-profile', createOrUpdateProfile);
 router.get('/profile', getProfile);
 router.put('/profile', createOrUpdateProfile);
+
 // Avatar upload with explicit Multer error handling
 router.post('/avatar', (req, res, next) => {
   upload.single('avatar')(req, res, function (err) {
