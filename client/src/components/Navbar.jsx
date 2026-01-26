@@ -11,7 +11,7 @@ function Navbar() {
       <div className="navbar-container">
         <Link to="/" className="navbar-brand">
           <img src="/akvora-logo.png" alt="Akvora" className="navbar-logo" />
-          <span>Akvora</span>
+          <span>Aravind</span>
         </Link>
         <div className="navbar-menu">
           <Link 
