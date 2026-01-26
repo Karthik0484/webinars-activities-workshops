@@ -3,11 +3,11 @@ import { useAuth } from '@clerk/clerk-react';
 import { QRCodeSVG } from 'qrcode.react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import './WorkshopRegistrationModal.css';
+import './EventRegistrationModal.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-function WorkshopRegistrationModal({ workshop, onClose, onSuccess }) {
+function EventRegistrationModal({ event, onClose, onSuccess }) {
     const { getToken } = useAuth();
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
@@ -52,7 +52,7 @@ function WorkshopRegistrationModal({ workshop, onClose, onSuccess }) {
         try {
             const token = await getToken();
             const response = await axios.post(`${API_URL}/registrations`, {
-                workshopId: workshop._id,
+                workshopId: event._id, // Sending event._id as workshopId for backend compatibility
                 nameOnCertificate: profile.certificateName || `${profile.firstName} ${profile.lastName}`,
                 upiReference
             }, {
@@ -82,9 +82,9 @@ function WorkshopRegistrationModal({ workshop, onClose, onSuccess }) {
         );
     }
 
-    const upiId = workshop.upiId || 'akvora@upi'; // Fallback UPI ID
-    const payeeName = workshop.payeeName || 'Akvora';
-    const amount = workshop.price || 0;
+    const upiId = event.upiId || 'akvora@upi'; // Fallback UPI ID
+    const payeeName = event.payeeName || 'Akvora';
+    const amount = event.price || 0;
 
     // Format: upi://pay?pa=UPI_ID&pn=NAME&am=AMOUNT&cu=INR
     const upiString = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&am=${amount}&cu=INR`;
@@ -94,8 +94,8 @@ function WorkshopRegistrationModal({ workshop, onClose, onSuccess }) {
             <div className="registration-modal-content" onClick={(e) => e.stopPropagation()}>
                 <button className="modal-close-btn" onClick={onClose}>&times;</button>
 
-                <h2>Workshop Registration</h2>
-                <p className="modal-subtitle">{workshop.title}</p>
+                <h2>Event Registration</h2>
+                <p className="modal-subtitle">{event.title}</p>
 
                 <form onSubmit={handleSubmit} className="registration-form">
                     <div className="form-section">
@@ -184,4 +184,4 @@ function WorkshopRegistrationModal({ workshop, onClose, onSuccess }) {
     );
 }
 
-export default WorkshopRegistrationModal;
+export default EventRegistrationModal;

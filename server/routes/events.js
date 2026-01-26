@@ -305,30 +305,6 @@ router.post('/:eventId/register', async (req, res) => {
 
     await event.save();
 
-    // Socket.IO Real-time Updates
-    const io = req.app.get('io');
-    if (io) {
-      // Notify Admin (New Registration)
-      io.to('admin').emit('registration:new', {
-        type: event.type,
-        eventId: event._id,
-        user: {
-          name: userName || 'User',
-          email: userEmail,
-          userId: userId
-        },
-        status: initialStatus
-      });
-
-      // Notify User (Status Update / Registration Success)
-      io.to(`user:${userId}`).emit('registration:status-updated', {
-        eventId: event._id,
-        status: initialStatus,
-        paymentStatus: initialPaymentStatus,
-        meetingLink: isFree ? event.meetingLink : undefined
-      });
-    }
-
     res.json({
       success: true,
       message: isFree ? 'Successfully registered for event' : 'Registration submitted. Pending approval.',
@@ -451,25 +427,6 @@ router.put('/:eventId/participants/:userId/status', adminAuth, async (req, res) 
     }
 
     await event.save();
-
-    // Socket.IO Real-time Updates
-    const io = req.app.get('io');
-    if (io) {
-      // Notify User
-      io.to(`user:${userId}`).emit('registration:status-updated', {
-        eventId: event._id,
-        status: status,
-        paymentStatus: event.participants[participantIndex].paymentStatus,
-        meetingLink: status === 'approved' ? event.meetingLink : undefined,
-        rejectionReason: status === 'rejected' ? rejectionReason : undefined
-      });
-
-      // Notify Admin (Stats Update)
-      io.to('admin').emit('stats:updated', {
-        type: event.type,
-        eventId: event._id
-      });
-    }
 
     // Send notification
     // Note: In a real app, we would import createNotification here

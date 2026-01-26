@@ -11,23 +11,23 @@ function Navbar() {
       <div className="navbar-container">
         <Link to="/" className="navbar-brand">
           <img src="/akvora-logo.png" alt="Akvora" className="navbar-logo" />
-          <span>Aravind</span>
+          <span>Akvora</span>
         </Link>
         <div className="navbar-menu">
-          <Link 
-            to="/webinars" 
+          <Link
+            to="/webinars"
             className={location.pathname === '/webinars' ? 'active' : ''}
           >
             Webinars
           </Link>
-          <Link 
-            to="/workshops" 
+          <Link
+            to="/workshops"
             className={location.pathname === '/workshops' ? 'active' : ''}
           >
             Workshops
           </Link>
-          <Link 
-            to="/internships" 
+          <Link
+            to="/internships"
             className={location.pathname === '/internships' ? 'active' : ''}
           >
             Internships

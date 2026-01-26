@@ -3,7 +3,7 @@ import { useAuth, useUser } from '@clerk/clerk-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import WorkshopRegistrationModal from '../components/WorkshopRegistrationModal';
+import EventRegistrationModal from '../components/EventRegistrationModal';
 import { calculateEventStatus, getStatusLabel } from '../utils/eventStatus';
 import './Workshops.css';
 
@@ -269,8 +269,8 @@ function Workshops() {
       )}
 
       {selectedWorkshop && (
-        <WorkshopRegistrationModal
-          workshop={selectedWorkshop}
+        <EventRegistrationModal
+          event={selectedWorkshop}
           onClose={() => {
             setSelectedWorkshop(null);
             if (searchParams.has('register')) {

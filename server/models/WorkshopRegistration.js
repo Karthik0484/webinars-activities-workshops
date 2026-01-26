@@ -20,7 +20,10 @@ const workshopRegistrationSchema = new mongoose.Schema({
         required: true,
         unique: true,
         trim: true,
-        match: [/^[0-9]{10,18}$/, 'Invalid UPI reference number']
+        match: [
+            /^(?:FREE-.*|[0-9]{10,18})$/,
+            'Invalid UPI reference number'
+        ]
     },
     status: {
         type: String,

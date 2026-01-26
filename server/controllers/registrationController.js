@@ -5,7 +5,10 @@ import Event from '../models/Event.js';
 /**
  * Register for a workshop with UPI reference
  */
-export async function registerForWorkshop(req, res) {
+/**
+ * Register for an event (Workshop, Webinar, etc.) with UPI reference
+ */
+export async function registerForEvent(req, res) {
     try {
         const { clerkId } = req;
         const { workshopId, nameOnCertificate, upiReference } = req.body;
@@ -24,10 +27,10 @@ export async function registerForWorkshop(req, res) {
             return res.status(404).json({ error: 'User profile not found' });
         }
 
-        // Find the workshop
+        // Find the event
         const workshop = await Event.findById(workshopId);
         if (!workshop) {
-            return res.status(404).json({ error: 'Workshop not found' });
+            return res.status(404).json({ error: 'Event not found' });
         }
 
         // Check if already registered
@@ -54,16 +57,27 @@ export async function registerForWorkshop(req, res) {
                     registration: existingRegistration
                 });
             }
-            return res.status(400).json({ error: 'You have already registered for this workshop' });
+            return res.status(400).json({ error: 'You have already registered for this event' });
         }
 
-        // Check if UPI reference is already used (to prevent duplicate payments)
+        // Check if UPI reference is already used (only if not a free system text)
+        // If it's a free event, we generate a unique FREE-Ref anyway, but checking duplicates doesn't hurt
+        // unless it's the exact same string, which shouldn't happen with Date.now()
         const duplicateUPI = await WorkshopRegistration.findOne({ upiReference });
         if (duplicateUPI) {
+            // Allow duplicate if it is a FREE reference (very unlikely to clash with Date.now() but just in case)
+            // Actually, unique constraint and our generation strategy handles this.
+            // But if user sends "FREE-WEBINAR" manually (as per my frontend change), it might clash if multiple users do it at same second?
+            // Wait, my frontend sends 'FREE-WEBINAR'.
+            // My controller overwrites it: `isFree ? NO`
+            // Line 76: `upiReference: isFree ? ... : upiReference`.
+            // So whatever frontend sends is IGNORED if isFree.
+            // So uniqueness is guaranteed by `Date.now()`.
+            // So lines 61-63 are fine for manual/paid flow.
             return res.status(400).json({ error: 'This UPI reference number has already been used' });
         }
 
-        // Check if Workshop is free (price is 0 or null)
+        // Check if Event is free (price is 0 or null)
         const isFree = !workshop.price || workshop.price === 0;
         const initialStatus = isFree ? 'approved' : 'pending';
         const initialPaymentStatus = isFree ? 'APPROVED' : 'PENDING';
@@ -73,7 +87,7 @@ export async function registerForWorkshop(req, res) {
             user: user._id,
             workshop: workshopId,
             nameOnCertificate,
-            upiReference: isFree ? `FREE-${Date.now()}` : upiReference, // Generate dummy Ref for free events
+            upiReference: isFree ? `FREE-${Date.now()}-${Math.floor(Math.random() * 1000)}` : upiReference, // Add random to ensure uniqueness
             status: initialStatus,
             paymentStatus: initialPaymentStatus
         });
@@ -95,39 +109,13 @@ export async function registerForWorkshop(req, res) {
             }
         }
 
-        // Socket.IO Real-time Updates
-        const io = req.app.get('io');
-        if (io) {
-            // Notify Admin (New Registration)
-            io.to('admin').emit('registration:new', {
-                type: 'workshop',
-                eventId: workshopId,
-                user: {
-                    name: `${user.firstName} ${user.lastName}`,
-                    email: user.email,
-                    userId: user.clerkId,
-                    akvoraId: user.akvoraId
-                },
-                status: initialStatus,
-                upiReference: isFree ? 'FREE' : upiReference
-            });
-
-            // Notify User
-            io.to(`user:${user.clerkId}`).emit('registration:status-updated', {
-                eventId: workshopId,
-                status: initialStatus,
-                paymentStatus: initialPaymentStatus,
-                meetingLink: isFree ? workshop.meetingLink : undefined
-            });
-        }
-
         res.status(201).json({
             success: true,
             message: 'Registration submitted successfully. Pending verification.',
             registration
         });
     } catch (error) {
-        console.error('Workshop registration error:', error);
+        console.error('Event registration error:', error);
         if (error.code === 11000) {
             return res.status(400).json({ error: 'Duplicate registration or UPI reference' });
         }
@@ -173,9 +161,9 @@ export async function getMyRegistrations(req, res) {
 }
 
 /**
- * Get all registrations for a specific workshop (Admin)
+ * Get all registrations for a specific event (Admin)
  */
-export async function getWorkshopRegistrations(req, res) {
+export async function getEventRegistrations(req, res) {
     try {
         const { workshopId } = req.params;
 
@@ -188,7 +176,7 @@ export async function getWorkshopRegistrations(req, res) {
             registrations
         });
     } catch (error) {
-        console.error('Get workshop registrations error:', error);
+        console.error('Get event registrations error:', error);
         res.status(500).json({ error: 'Failed to fetch registrations' });
     }
 }
@@ -288,22 +276,18 @@ export async function updateRegistrationStatus(req, res) {
         if (io) {
             io.to(`user:${user.clerkId}`).emit('registration:status-updated', {
                 registrationId: registration._id,
-                eventId: workshop._id, // Add eventId for consistency
                 status,
-                paymentStatus: registration.paymentStatus, // Include payment status
                 workshop: {
                     id: workshop._id,
                     title: workshop.title
                 },
-                message: notificationMessage,
-                meetingLink: status === 'approved' ? workshop.meetingLink : undefined // Send meeting link if approved
+                message: notificationMessage
             });
 
             // Emit to admin for participant count update
             io.to('admin').emit('stats:updated', {
                 type: 'registration',
-                action: status,
-                eventId: workshop._id
+                action: status
             });
         }
 
@@ -321,6 +305,9 @@ export async function updateRegistrationStatus(req, res) {
 /**
  * Get user participation history (Webinars, Workshops, Internships)
  */
+/**
+ * Get user participation history (Webinars, Workshops, Internships)
+ */
 export async function getUserParticipationHistory(req, res) {
     try {
         const { clerkId } = req;
@@ -330,76 +317,104 @@ export async function getUserParticipationHistory(req, res) {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        // 1. Get Workshop Registrations (from WorkshopRegistration model)
-        const workshopRegistrations = await WorkshopRegistration.find({ user: user._id })
-            .populate('workshop', 'title type date endDate status imageUrl instructor')
+        // 1. Get ALL Registrations from WorkshopRegistration model (Unified source for payment/registration status)
+        const allRegistrations = await WorkshopRegistration.find({ user: user._id })
+            .populate('workshop', 'title type date endDate status imageUrl instructor meetingLink price')
             .sort({ createdAt: -1 });
 
-        const workshops = workshopRegistrations.map(reg => {
-            // Map status for frontend display
-            let displayStatus = 'Registered';
-            if (reg.status === 'approved') displayStatus = 'Approved';
-            else if (reg.status === 'rejected') displayStatus = 'Rejected';
-            else if (reg.status === 'pending') displayStatus = 'Pending';
-
-            return {
-                id: reg.workshop?._id,
-                title: reg.workshop?.title,
-                type: 'workshop',
-                status: displayStatus,
-                date: reg.workshop?.date,
-                endDate: reg.workshop?.endDate,
-                imageUrl: reg.workshop?.imageUrl,
-                instructor: reg.workshop?.instructor, // Include instructor
-                registrationStatus: reg.status
-            };
+        // Map keyed by event ID for easy lookup
+        const registrationMap = new Map();
+        allRegistrations.forEach(reg => {
+            if (reg.workshop) {
+                registrationMap.set(reg.workshop._id.toString(), reg);
+            }
         });
 
-        // 2. Get Events Participation (Webinars, Internships)
-        // Find events where the user is in the participants array
-        const events = await Event.find({
-            'participants.userId': clerkId,
-            type: { $in: ['webinar', 'internship'] }
-        }).select('title type date endDate status imageUrl participants instructor meetingLink').sort({ date: -1 });
+        // 2. Get Events where user is in 'participants' list (Legacy + Free Auto-approved)
+        const participantEvents = await Event.find({
+            'participants.userId': clerkId
+        }).select('title type date endDate status imageUrl participants instructor meetingLink price').sort({ date: -1 });
 
-        const webinars = [];
-        const internships = [];
-        const now = new Date();
-
-        events.forEach(event => {
-            // Find specific participant record
-            const participant = event.participants.find(p => p.userId === clerkId);
-
-            // Determine status based on dates
+        // Helper to process an event item
+        const processEvent = (eventObj, regDoc = null, participantDoc = null) => {
+            const now = new Date();
             let eventStatus = 'Registered';
-            if (event.endDate && new Date(event.endDate) < now) {
+            if (eventObj.endDate && new Date(eventObj.endDate) < now) {
                 eventStatus = 'Completed';
             }
 
-            // Get registration status from participant record
-            // Default to 'approved' for backward compatibility with old records
-            const registrationStatus = participant ? (participant.status || 'approved') : 'approved';
+            // Determine registration status
+            // Priority: WorkshopRegistration status > Participant List status > 'approved' default
+            let registrationStatus = 'approved';
+            let meetingLink = undefined;
 
-            const item = {
-                id: event._id,
-                title: event.title,
-                type: event.type,
-                status: eventStatus,
-                date: event.date,
-                endDate: event.endDate,
-                imageUrl: event.imageUrl,
-                instructor: event.instructor, // Include instructor
-                // Only include meeting link if status is approved
-                meetingLink: registrationStatus === 'approved' ? event.meetingLink : undefined,
-                registeredAt: participant ? participant.registeredAt : null,
-                registrationStatus: registrationStatus
-            };
-
-            if (event.type === 'webinar') {
-                webinars.push(item);
-            } else if (event.type === 'internship') {
-                internships.push(item);
+            if (regDoc) {
+                registrationStatus = regDoc.status;
+                if (registrationStatus === 'approved' && regDoc.paymentStatus === 'APPROVED') {
+                    meetingLink = eventObj.meetingLink;
+                }
+            } else if (participantDoc) {
+                registrationStatus = participantDoc.status || 'approved';
+                if (registrationStatus === 'approved') {
+                    meetingLink = eventObj.meetingLink;
+                }
             }
+
+            // Map status for frontend display label
+            let displayStatus = 'Registered';
+            if (registrationStatus === 'approved') displayStatus = 'Approved';
+            else if (registrationStatus === 'rejected') displayStatus = 'Rejected';
+            else if (registrationStatus === 'pending') displayStatus = 'Pending';
+
+            return {
+                id: eventObj._id,
+                title: eventObj.title,
+                type: eventObj.type,
+                status: displayStatus, // UI Label
+                date: eventObj.date,
+                endDate: eventObj.endDate,
+                imageUrl: eventObj.imageUrl,
+                instructor: eventObj.instructor,
+                meetingLink: meetingLink,
+                registrationStatus: registrationStatus, // Technical status
+                rejectionReason: regDoc ? regDoc.rejectionReason : null
+            };
+        };
+
+        const workshops = [];
+        const webinars = [];
+        const internships = [];
+        const processedEventIds = new Set();
+
+        // Process from WorkshopRegistration first (covers Paid Pending/Approved/Rejected)
+        allRegistrations.forEach(reg => {
+            if (!reg.workshop) return;
+
+            const eventId = reg.workshop._id.toString();
+            if (processedEventIds.has(eventId)) return;
+
+            const item = processEvent(reg.workshop, reg, null);
+
+            if (reg.workshop.type === 'workshop') workshops.push(item);
+            else if (reg.workshop.type === 'webinar') webinars.push(item);
+            else if (reg.workshop.type === 'internship') internships.push(item);
+
+            processedEventIds.add(eventId);
+        });
+
+        // Process leftovers from Event.participants (covers Free Auto-approved or Legacy that migrated without WorkshopRegistration)
+        participantEvents.forEach(event => {
+            const eventId = event._id.toString();
+            if (processedEventIds.has(eventId)) return;
+
+            const participant = event.participants.find(p => p.userId === clerkId);
+            const item = processEvent(event, null, participant);
+
+            if (event.type === 'workshop') workshops.push(item);
+            else if (event.type === 'webinar') webinars.push(item);
+            else if (event.type === 'internship') internships.push(item);
+
+            processedEventIds.add(eventId);
         });
 
         res.json({
