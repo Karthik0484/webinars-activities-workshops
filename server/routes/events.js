@@ -279,7 +279,7 @@ router.post('/:eventId/register', async (req, res) => {
     }
 
     // Determine status based on price
-    const isFree = !event.price || event.price === 0;
+    const isFree = !event.price || event.price == 0;
     const initialStatus = isFree ? 'approved' : 'pending';
     const initialPaymentStatus = isFree ? 'APPROVED' : 'PENDING';
 

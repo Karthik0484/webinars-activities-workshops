@@ -15,10 +15,29 @@ function Internships() {
   const [previewImage, setPreviewImage] = useState(null);
   const { isSignedIn, user } = useUser();
   const { getToken } = useAuth();
+  const [myRegistrations, setMyRegistrations] = useState([]);
 
   useEffect(() => {
     fetchInternships();
-  }, []);
+    if (isSignedIn) {
+      fetchMyRegistrations();
+    }
+  }, [isSignedIn]);
+
+  const fetchMyRegistrations = async () => {
+    try {
+      const token = await getToken();
+      // Using the unified endpoint that returns all registrations
+      const response = await axios.get(`${API_URL}/registrations/my`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (response.data.success) {
+        setMyRegistrations(response.data.registrations);
+      }
+    } catch (error) {
+      console.error('Failed to fetch registrations:', error);
+    }
+  };
 
   const fetchInternships = async () => {
     try {
@@ -53,6 +72,7 @@ function Internships() {
         toast.success(response.data.message);
         // Refresh internships to update participant count
         fetchInternships();
+        fetchMyRegistrations();
       }
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to apply for internship');
@@ -121,7 +141,7 @@ function Internships() {
                       </span>
 
                       <span className="event-price">
-                        {internship.price === 0 ? 'Free' : `$${internship.price}`}
+                        {internship.price == 0 ? 'Free' : `$${internship.price}`}
                       </span>
                     </div>
                   </div>
@@ -159,12 +179,73 @@ function Internships() {
                   )}
 
                   <div className="event-actions">
-                    <button
-                      onClick={() => handleApply(internship._id)}
-                      className="apply-btn"
-                    >
-                      Apply Now
-                    </button>
+                    {(() => {
+                      // Check for existing registration
+                      const registration = myRegistrations.find(reg =>
+                        (reg.workshop && reg.workshop._id === internship._id) || // Matched via workshop ID
+                        (reg.workshop === internship._id) // Fallback if populated ID matches
+                      );
+
+                      // Also check participant list for direct matches (legacy/direct writes)
+                      const isParticipant = internship.participants?.some(p => p.userId === user?.id);
+
+                      const status = registration?.status || (isParticipant ? 'approved' : null);
+                      const paymentStatus = registration?.paymentStatus || (isParticipant ? 'APPROVED' : null);
+                      const rejectionReason = registration?.rejectionReason;
+
+                      if (!isSignedIn) {
+                        return (
+                          <button
+                            onClick={() => toast.error('Please sign in to apply')}
+                            className="apply-btn"
+                          >
+                            Apply Now
+                          </button>
+                        );
+                      }
+
+                      if (status === 'approved' || paymentStatus === 'APPROVED') {
+                        return (
+                          <button className="apply-btn registered" disabled style={{ background: '#10b981', cursor: 'default' }}>
+                            ✓ Applied
+                          </button>
+                        );
+                      }
+
+                      if (status === 'rejected' || paymentStatus === 'REJECTED') {
+                        return (
+                          <div className="rejected-container">
+                            <p style={{ color: '#ef4444', fontSize: '12px', marginBottom: '5px' }}>
+                              {rejectionReason ? `Rejected: ${rejectionReason}` : 'Application Rejected'}
+                            </p>
+                            <button
+                              onClick={() => handleApply(internship._id)}
+                              className="apply-btn"
+                              style={{ background: '#ef4444' }}
+                            >
+                              Apply Again
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      if (status === 'pending' || paymentStatus === 'PENDING') {
+                        return (
+                          <button className="apply-btn pending" disabled style={{ background: '#f59e0b', cursor: 'wait' }}>
+                            Application Pending
+                          </button>
+                        );
+                      }
+
+                      return (
+                        <button
+                          onClick={() => handleApply(internship._id)}
+                          className="apply-btn"
+                        >
+                          Apply Now
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>

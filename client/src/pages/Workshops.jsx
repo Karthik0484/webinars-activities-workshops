@@ -78,11 +78,41 @@ function Workshops() {
     return myRegistrations.some(reg => reg.workshop._id === workshopId);
   };
 
-  const handleRegisterClick = (workshop) => {
+  const handleRegisterClick = async (workshop) => {
     if (!isSignedIn) {
       toast.error('Please sign in to register for workshops');
       return;
     }
+
+    // Free event - Auto register directly
+    if (workshop.price == 0) {
+      try {
+        const token = await getToken();
+        // Use a generic placeholder for free workshops. 
+        // The backend will generate a unique FREE-ID if it detects isFree, so this dummy value is just to pass basic non-empty validation if any.
+        // Actually, our backend now skips validation if isFree, but passing a string doesn't hurt.
+        const response = await axios.post(`${API_URL}/registrations`, {
+          workshopId: workshop._id,
+          nameOnCertificate: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User',
+          upiReference: 'FREE-WORKSHOP'
+        }, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        if (response.data.success) {
+          toast.success(response.data.message);
+          fetchWorkshops();
+          fetchMyRegistrations();
+        }
+      } catch (error) {
+        toast.error(error.response?.data?.error || 'Failed to register for workshop');
+      }
+      return;
+    }
+
+    // Paid event - show modal
     setSelectedWorkshop(workshop);
   };
 

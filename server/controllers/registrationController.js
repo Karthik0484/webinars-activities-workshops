@@ -17,8 +17,8 @@ export async function registerForEvent(req, res) {
             return res.status(401).json({ error: 'Unauthorized' });
         }
 
-        if (!workshopId || !nameOnCertificate || !upiReference) {
-            return res.status(400).json({ error: 'All fields are required' });
+        if (!workshopId || !nameOnCertificate) {
+            return res.status(400).json({ error: 'Workshop ID and Name on Certificate are required' });
         }
 
         // Find the user in our database
@@ -33,6 +33,14 @@ export async function registerForEvent(req, res) {
             return res.status(404).json({ error: 'Event not found' });
         }
 
+        // Check if Event is free (price is 0, null, or string "0")
+        const isFree = !workshop.price || workshop.price == 0;
+
+        // Validate UPI reference only for PAID events
+        if (!isFree && !upiReference) {
+            return res.status(400).json({ error: 'UPI Reference is required for paid events' });
+        }
+
         // Check if already registered
         const existingRegistration = await WorkshopRegistration.findOne({
             user: user._id,
@@ -42,43 +50,51 @@ export async function registerForEvent(req, res) {
         if (existingRegistration) {
             // If the previous registration was rejected, allow re-registration
             if (existingRegistration.paymentStatus === 'REJECTED') {
-                existingRegistration.upiReference = upiReference;
-                existingRegistration.status = 'pending';
-                existingRegistration.paymentStatus = 'PENDING';
+                existingRegistration.upiReference = isFree ? `FREE-${Date.now()}` : upiReference;
+                existingRegistration.status = isFree ? 'approved' : 'pending';
+                existingRegistration.paymentStatus = isFree ? 'APPROVED' : 'PENDING';
                 existingRegistration.rejectionReason = '';
                 existingRegistration.rejectedAt = null;
                 existingRegistration.nameOnCertificate = nameOnCertificate;
 
                 await existingRegistration.save();
 
+                // If free/approved, add to Event's participants list immediately
+                if (isFree) {
+                    const isAlreadyParticipant = workshop.participants.some(
+                        p => p.userId === user.clerkId
+                    );
+
+                    if (!isAlreadyParticipant) {
+                        workshop.participants.push({
+                            userId: user.clerkId,
+                            email: user.email,
+                            name: `${user.firstName} ${user.lastName}`,
+                            registeredAt: new Date(),
+                            status: 'approved',
+                            paymentStatus: 'APPROVED'
+                        });
+                        await workshop.save();
+                    }
+                }
+
                 return res.status(200).json({
                     success: true,
-                    message: 'Re-registration submitted successfully. Pending verification.',
+                    message: isFree ? 'Registration successful!' : 'Re-registration submitted. Pending verification.',
                     registration: existingRegistration
                 });
             }
             return res.status(400).json({ error: 'You have already registered for this event' });
         }
 
-        // Check if UPI reference is already used (only if not a free system text)
-        // If it's a free event, we generate a unique FREE-Ref anyway, but checking duplicates doesn't hurt
-        // unless it's the exact same string, which shouldn't happen with Date.now()
-        const duplicateUPI = await WorkshopRegistration.findOne({ upiReference });
-        if (duplicateUPI) {
-            // Allow duplicate if it is a FREE reference (very unlikely to clash with Date.now() but just in case)
-            // Actually, unique constraint and our generation strategy handles this.
-            // But if user sends "FREE-WEBINAR" manually (as per my frontend change), it might clash if multiple users do it at same second?
-            // Wait, my frontend sends 'FREE-WEBINAR'.
-            // My controller overwrites it: `isFree ? NO`
-            // Line 76: `upiReference: isFree ? ... : upiReference`.
-            // So whatever frontend sends is IGNORED if isFree.
-            // So uniqueness is guaranteed by `Date.now()`.
-            // So lines 61-63 are fine for manual/paid flow.
-            return res.status(400).json({ error: 'This UPI reference number has already been used' });
+        // Check if UPI reference is already used (only for PAID events)
+        if (!isFree) {
+            const duplicateUPI = await WorkshopRegistration.findOne({ upiReference });
+            if (duplicateUPI) {
+                return res.status(400).json({ error: 'This UPI reference number has already been used' });
+            }
         }
 
-        // Check if Event is free (price is 0 or null)
-        const isFree = !workshop.price || workshop.price === 0;
         const initialStatus = isFree ? 'approved' : 'pending';
         const initialPaymentStatus = isFree ? 'APPROVED' : 'PENDING';
 
@@ -103,7 +119,9 @@ export async function registerForEvent(req, res) {
                     userId: user.clerkId,
                     email: user.email,
                     name: `${user.firstName} ${user.lastName}`,
-                    registeredAt: new Date()
+                    registeredAt: new Date(),
+                    status: 'approved',
+                    paymentStatus: 'APPROVED'
                 });
                 await workshop.save();
             }
@@ -139,23 +157,16 @@ export async function getMyRegistrations(req, res) {
             .populate('workshop', 'title date type status imageUrl price meetingLink')
             .sort({ createdAt: -1 });
 
-        // Sanitize: Only show registrations that are APPROVED and valid
+        // Sanitize: Map to object and include status for frontend logic
         const sanitizedRegistrations = registrations
-            .filter(reg => {
-                // Must have a workshop attached
-                if (!reg.workshop) return false;
-                // MUST be approved status AND approved payment
-                // The user specifically requested: "Remove Invalid Date, Empty / malformed records, Deleted or rejected registrations"
-                // And "Only display workshops... Registration status is approved"
-                const isApproved = reg.status === 'approved' && reg.paymentStatus === 'APPROVED';
-                return isApproved;
-            })
             .map(reg => {
                 const regObj = reg.toObject();
-                // Meeting link is already secure because we only return Approved ones now, 
-                // but good to keep the logic consistent if we ever loosen the filter.
-                // Since we filtered above, this check is technically redundant for the current requirement,
-                // but safe to keep for data integrity.
+                // Security: Only expose meeting link if Approved
+                if (reg.status !== 'approved' || reg.paymentStatus !== 'APPROVED') {
+                    if (regObj.workshop) {
+                        regObj.workshop.meetingLink = undefined;
+                    }
+                }
                 return regObj;
             });
 
