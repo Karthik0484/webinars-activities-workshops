@@ -41,7 +41,7 @@ function Header() {
                     <SignOutButton>
                         <button className="logout-action" title="Sign Out">
                             <LogOut size={18} />
-                            <span>Sign Out</span>
+                            <span className="logout-text">Sign Out</span>
                         </button>
                     </SignOutButton>
                 )}

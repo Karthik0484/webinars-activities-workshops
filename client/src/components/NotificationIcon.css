@@ -230,9 +230,26 @@
         max-height: 400px;
     }
 
-
     .notification-list {
         max-height: 340px;
+    }
+
+    .notification-icon-btn {
+        padding: 6px;
+    }
+
+    .notification-icon-btn svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    .notification-badge {
+        min-width: 16px;
+        height: 16px;
+        font-size: 9px;
+        padding: 1px 4px;
+        right: 0px;
+        top: 0px;
     }
 }
 

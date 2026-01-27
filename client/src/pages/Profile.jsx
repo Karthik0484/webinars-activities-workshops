@@ -5,6 +5,7 @@ import axios from 'axios';
 import Cropper from 'react-easy-crop';
 import { useDbUser } from '../contexts/UserContext';
 import './Profile.css';
+import { Camera } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
@@ -241,26 +242,38 @@ function Profile() {
 
             <div className="profile-header-card">
                 <div className="avatar-block">
-                    <div className="avatar-preview">
-                        {avatarPreview ? (
-                            <img src={avatarPreview} alt="Avatar" />
-                        ) : (
-                            <div className="avatar-placeholder">Add Photo</div>
+                    <div className="avatar-wrapper">
+                        <div className="avatar-preview">
+                            {avatarPreview ? (
+                                <img src={avatarPreview} alt="Avatar" />
+                            ) : (
+                                <div className="avatar-placeholder">
+                                    {formData.firstName?.[0] || 'U'}
+                                </div>
+                            )}
+                        </div>
+
+                        {!globalBlocked && (
+                            <label className="avatar-camera-btn" title="Change Photo">
+                                <Camera size={18} />
+                                <input type="file" accept="image/*" onChange={handleAvatarChange} />
+                            </label>
                         )}
                     </div>
-                    {!globalBlocked && (
-                        <label className="avatar-upload-btn">
-                            Upload Photo
-                            <input type="file" accept="image/*" onChange={handleAvatarChange} />
-                        </label>
-                    )}
-                    <p className="avatar-hint">PNG/JPG, up to 2MB</p>
                 </div>
 
                 <div className="id-block">
-                    <p className="label">AKVORA ID</p>
-                    <h2>{akvoraId || 'Pending'}</h2>
-                    <p className="muted">{formData.email}</p>
+                    {/* Name can go here if desired, otherwise just Email -> ID */}
+                    <h2 className="user-name">
+                        {formData.firstName} {formData.lastName}
+                    </h2>
+                    <p className="user-email">{formData.email}</p>
+
+                    <div className="akvora-id-container">
+                        <span className="id-label">ID:</span>
+                        <code className="akvora-id-text">{akvoraId || 'PENDING'}</code>
+                    </div>
+
                     {success && <div className="success-message compact">{success}</div>}
                     {error && <div className="error-message compact">{error}</div>}
                 </div>
@@ -270,65 +283,60 @@ function Profile() {
                 <h1>{globalBlocked ? 'Your Profile' : 'Complete Your Profile'}</h1>
 
                 <form onSubmit={handleSubmit} className="profile-form">
-                    <div className="form-group">
-                        <label>AKVORA ID (Read-only)</label>
-                        <input
-                            type="text"
-                            value={akvoraId || 'Will Be Generated On Save'}
-                            disabled
-                            style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                        />
-                    </div>
-                    <div className="form-group">
-                        <label htmlFor="firstName">First Name</label>
-                        <input
-                            type="text"
-                            id="firstName"
-                            name="firstName"
-                            value={formData.firstName}
-                            onChange={handleChange}
-                            required
-                            disabled={globalBlocked}
-                        />
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label htmlFor="firstName">First Name</label>
+                            <input
+                                type="text"
+                                id="firstName"
+                                name="firstName"
+                                value={formData.firstName}
+                                onChange={handleChange}
+                                required
+                                disabled={globalBlocked}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label htmlFor="lastName">Last Name</label>
+                            <input
+                                type="text"
+                                id="lastName"
+                                name="lastName"
+                                value={formData.lastName}
+                                onChange={handleChange}
+                                required
+                                disabled={globalBlocked}
+                            />
+                        </div>
                     </div>
 
-                    <div className="form-group">
-                        <label htmlFor="lastName">Last Name</label>
-                        <input
-                            type="text"
-                            id="lastName"
-                            name="lastName"
-                            value={formData.lastName}
-                            onChange={handleChange}
-                            required
-                            disabled={globalBlocked}
-                        />
-                    </div>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label htmlFor="email">Email</label>
+                            <input
+                                type="email"
+                                id="email"
+                                name="email"
+                                value={formData.email}
+                                onChange={handleChange}
+                                required
+                                disabled={globalBlocked}
+                            />
+                        </div>
 
-                    <div className="form-group">
-                        <label htmlFor="email">Email</label>
-                        <input
-                            type="email"
-                            id="email"
-                            name="email"
-                            value={formData.email}
-                            onChange={handleChange}
-                            required
-                            disabled={globalBlocked}
-                        />
-                    </div>
-
-                    <div className="form-group">
-                        <label htmlFor="phone">Phone</label>
-                        <input
-                            type="tel"
-                            id="phone"
-                            name="phone"
-                            value={formData.phone}
-                            onChange={handleChange}
-                            disabled={globalBlocked}
-                            required
-                        />
+                        <div className="form-group">
+                            <label htmlFor="phone">Phone</label>
+                            <input
+                                type="tel"
+                                id="phone"
+                                name="phone"
+                                value={formData.phone}
+                                onChange={handleChange}
+                                disabled={globalBlocked}
+                                required
+                            />
+                        </div>
                     </div>
 
                     <div className="form-group">
@@ -344,6 +352,16 @@ function Profile() {
                         />
                     </div>
 
+                    <div className="form-group">
+                        <label>AKVORA ID (Read-only)</label>
+                        <input
+                            type="text"
+                            value={akvoraId || 'Will Be Generated On Save'}
+                            disabled
+                            className="akvora-id-input"
+                        />
+                    </div>
+
                     {!globalBlocked && (
                         <div className="form-actions">
                             <button type="submit" disabled={loading} className="submit-btn">
@@ -356,45 +374,46 @@ function Profile() {
 
 
 
-            {cropModalOpen && (
-                <div className="cropper-overlay">
-                    <div className="cropper-modal">
-                        <h3>Crop your photo</h3>
-                        <div className="cropper-area">
-                            <Cropper
-                                image={localImage}
-                                crop={crop}
-                                zoom={zoom}
-                                aspect={1}
-                                onCropChange={setCrop}
-                                onZoomChange={setZoom}
-                                onCropComplete={onCropComplete}
-                            />
-                        </div>
-                        <div className="cropper-controls">
-                            <label>
-                                Zoom
-                                <input
-                                    type="range"
-                                    min="1"
-                                    max="3"
-                                    step="0.1"
-                                    value={zoom}
-                                    onChange={(e) => setZoom(Number(e.target.value))}
+            {
+                cropModalOpen && (
+                    <div className="cropper-overlay">
+                        <div className="cropper-modal">
+                            <h3>Crop your photo</h3>
+                            <div className="cropper-area">
+                                <Cropper
+                                    image={localImage}
+                                    crop={crop}
+                                    zoom={zoom}
+                                    aspect={1}
+                                    onCropChange={setCrop}
+                                    onZoomChange={setZoom}
+                                    onCropComplete={onCropComplete}
                                 />
-                            </label>
-                            <div className="cropper-actions">
-                                <button type="button" className="secondary-btn" onClick={() => setCropModalOpen(false)}>
-                                    Cancel
-                                </button>
-                                <button type="button" className="primary-btn" onClick={handleCropSave}>
-                                    Save
-                                </button>
+                            </div>
+                            <div className="cropper-controls">
+                                <label>
+                                    Zoom
+                                    <input
+                                        type="range"
+                                        min="1"
+                                        max="3"
+                                        step="0.1"
+                                        value={zoom}
+                                        onChange={(e) => setZoom(Number(e.target.value))}
+                                    />
+                                </label>
+                                <div className="cropper-actions">
+                                    <button type="button" className="secondary-btn" onClick={() => setCropModalOpen(false)}>
+                                        Cancel
+                                    </button>
+                                    <button type="button" className="primary-btn" onClick={handleCropSave}>
+                                        Save
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
         </div>
     );
 }
