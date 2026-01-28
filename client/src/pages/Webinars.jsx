@@ -6,6 +6,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import EventRegistrationModal from '../components/EventRegistrationModal';
 import { calculateEventStatus, getStatusLabel } from '../utils/eventStatus';
+import { formatPrice } from '../utils/currency';
 import './Webinars.css';
 
 
@@ -236,7 +237,7 @@ function Webinars() {
                       </span>
 
                       <span className="event-price">
-                        {webinar.price == 0 ? 'Free' : `$${webinar.price}`}
+                        {formatPrice(webinar.price)}
                       </span>
                     </div>
                   </div>

@@ -4,6 +4,7 @@ import { useSocket } from '../contexts/SocketContext';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { calculateEventStatus, getStatusLabel } from '../utils/eventStatus';
+import { formatPrice } from '../utils/currency';
 import './Internships.css';
 
 
@@ -193,7 +194,7 @@ function Internships() {
                       </span>
 
                       <span className="event-price">
-                        {internship.price == 0 ? 'Free' : `$${internship.price}`}
+                        {formatPrice(internship.price)}
                       </span>
                     </div>
                   </div>

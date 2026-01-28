@@ -6,6 +6,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import EventRegistrationModal from '../components/EventRegistrationModal';
 import { calculateEventStatus, getStatusLabel } from '../utils/eventStatus';
+import { formatPrice } from '../utils/currency';
 import './Workshops.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -227,7 +228,7 @@ function Workshops() {
                       </span>
 
                       <span className="event-price">
-                        {workshop.price === 0 ? 'Free' : `$${workshop.price}`}
+                        {formatPrice(workshop.price)}
                       </span>
                     </div>
                   </div>

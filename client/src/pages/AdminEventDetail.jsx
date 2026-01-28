@@ -4,6 +4,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import { Upload, X, CheckCircle, Loader2, Type, AlertCircle } from 'lucide-react';
 import { calculateEventStatus, getStatusLabel } from '../utils/eventStatus';
+import { formatPrice } from '../utils/currency';
 import './AdminEventDetail.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -250,7 +251,7 @@ function AdminEventDetail() {
                             <p><strong>Instructor:</strong> {event.instructor}</p>
 
                             <p><strong>Location:</strong> {event.location || 'Online'}</p>
-                            <p><strong>Price:</strong> ₹{event.price}</p>
+                            <p><strong>Price:</strong> {formatPrice(event.price)}</p>
                             <p><strong>Status:</strong> <span className={`status-badge-inline ${calculateEventStatus(event.date, event.endDate)}`}>
                                 {getStatusLabel(calculateEventStatus(event.date, event.endDate))}
                             </span></p>

@@ -3,6 +3,7 @@ import { useAuth } from '@clerk/clerk-react';
 import { QRCodeSVG } from 'qrcode.react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { formatPrice } from '../utils/currency';
 import './EventRegistrationModal.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -143,9 +144,9 @@ function EventRegistrationModal({ event, onClose, onSuccess }) {
                             <div className="qr-details">
                                 <p><strong>Payee:</strong> {payeeName}</p>
                                 <p><strong>UPI ID:</strong> {upiId}</p>
-                                <p className="amount-highlight"><strong>Amount:</strong> ₹{amount}</p>
+                                <p className="amount-highlight"><strong>Amount:</strong> {formatPrice(amount)}</p>
                                 <div className="dynamic-qr-hint">
-                                    <p>✨ Auto-fills amount (₹{amount})</p>
+                                    <p>✨ Auto-fills amount ({formatPrice(amount)})</p>
                                     <small>Scan with GPay, PhonePe, or Paytm</small>
                                 </div>
                             </div>
