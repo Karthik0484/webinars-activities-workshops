@@ -52,7 +52,32 @@ function ProtectedRoute({ children }) {
 function App() {
   return (
     <BrowserRouter>
-      <Toaster position="top-right" />
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#1a1a2e',
+            color: '#fff',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '12px',
+            fontSize: '14px',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+          },
+          success: {
+            iconTheme: {
+              primary: '#48bb78',
+              secondary: '#fff',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#f56565',
+              secondary: '#fff',
+            },
+          },
+        }}
+      />
       <Routes>
         {/* Clerk's multi-step flows need wildcard routes */}
         <Route path="/sign-in/*" element={<SignIn />} />
