@@ -230,10 +230,10 @@ function Profile() {
                             Your account has been blocked by the AKVORA admin.
                         </p>
                         <div className="blocked-contact">
-                            <p>Please contact support if you believe this is an error:</p>
+                            <p>Your account has been blocked due to some of your actions. Contact the details provided below to unblock your Akvora account.</p>
                             <div className="contact-info">
-                                <p>📧 Email: <strong>support@akvora.com</strong></p>
-                                <p>📞 Phone: <strong>+91-XXXXXXXXXX</strong></p>
+                                <p>📧 Email: <strong>unblockakvora@gmail.com</strong></p>
+                                <p>📞 Phone: <strong>9361992041</strong></p>
                             </div>
                         </div>
                     </div>
